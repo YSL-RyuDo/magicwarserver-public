@@ -127,7 +127,21 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Client.cpp" />
+    <ClCompile Include="GameServer.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="PacketManager.cpp" />
+    <ClCompile Include="PacketType.cpp" />
+    <ClCompile Include="UserAccountManager.cpp" />
+    <ClCompile Include="UserDataManager.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Client.h" />
+    <ClInclude Include="GameServer.h" />
+    <ClInclude Include="PacketManager.h" />
+    <ClInclude Include="PacketType.h" />
+    <ClInclude Include="UserAccountManager.h" />
+    <ClInclude Include="UserDataManager.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
