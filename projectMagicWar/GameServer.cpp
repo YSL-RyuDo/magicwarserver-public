@@ -1,9 +1,12 @@
 #include "GameServer.h"
 #include "PacketManager.h"
 #include <iostream>
+#include <unordered_map>
 #include <algorithm>
 #include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
+
+
 
 GameServer::GameServer(int port) : port(port) {
     WSADATA wsa;
@@ -25,6 +28,9 @@ GameServer::GameServer(int port) : port(port) {
 
     listen(serverSock, 5);
     std::cout << "게임 서버 실행 중... 포트 " << port << std::endl;
+
+    matchManager.Init(&this->clientsMap);
+    PacketManager::Init(&this->clientsMap, &this->matchManager);
 }
 
 GameServer::~GameServer() {
@@ -33,7 +39,14 @@ GameServer::~GameServer() {
 }
 
 void GameServer::start() {
-    acceptClients();
+    std::thread([this]() {
+        while (true) {
+            matchManager.Update();   // 매칭 자동 검사
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+        }).detach();
+
+    acceptClients(); // 기존 클라 accept 루프
 }
 
 void GameServer::acceptClients() {

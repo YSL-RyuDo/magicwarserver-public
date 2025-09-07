@@ -76,6 +76,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -130,18 +131,22 @@
     <ClCompile Include="Client.cpp" />
     <ClCompile Include="GameServer.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="MatchManager.cpp" />
     <ClCompile Include="PacketManager.cpp" />
     <ClCompile Include="PacketType.cpp" />
     <ClCompile Include="UserAccountManager.cpp" />
     <ClCompile Include="UserDataManager.cpp" />
+    <ClCompile Include="Utils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Client.h" />
     <ClInclude Include="GameServer.h" />
+    <ClInclude Include="MatchManager.h" />
     <ClInclude Include="PacketManager.h" />
     <ClInclude Include="PacketType.h" />
     <ClInclude Include="UserAccountManager.h" />
     <ClInclude Include="UserDataManager.h" />
+    <ClInclude Include="Utils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

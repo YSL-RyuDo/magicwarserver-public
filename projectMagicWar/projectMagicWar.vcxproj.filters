@@ -36,6 +36,12 @@
     <ClCompile Include="UserDataManager.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="MatchManager.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="Utils.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="PacketType.h">
@@ -54,6 +60,12 @@
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="UserDataManager.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="MatchManager.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Utils.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>

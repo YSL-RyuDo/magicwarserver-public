@@ -1,9 +1,20 @@
 #include "PacketManager.h"
 #include "UserAccountManager.h"
 #include "UserDataManager.h"
+#include "MatchManager.h"
+#include "Utils.h"
 #include <fstream>   // ifstream, ofstream
 #include <sstream>   // stringstream
 #include <iostream>
+
+std::unordered_map<std::string, Client>* PacketManager::s_clients = nullptr;
+MatchManager* PacketManager::s_match = nullptr;
+
+void PacketManager::Init(std::unordered_map<std::string, Client>* clients, MatchManager* mm) {
+    s_clients = clients;
+    s_match = mm;
+}
+
 void PacketManager::sendPacket(SOCKET sock, int packetId, const std::string& msg) {
     char header[sizeof(int)];
     memcpy(header, &packetId, sizeof(int));
@@ -11,13 +22,17 @@ void PacketManager::sendPacket(SOCKET sock, int packetId, const std::string& msg
     std::string packet(header, sizeof(int));
     packet += msg;
 
-    send(sock, packet.c_str(), (int)packet.size(), 0);
+    int sent = send(sock, packet.c_str(), (int)packet.size(), 0);
+    if (sent == SOCKET_ERROR) {
+        std::cerr << "[sendPacket 오류] send 실패 (code=" << WSAGetLastError() << ")" << std::endl;
+        return;
+    }
 
     std::cout << "[서버→클라] ID=" << packetId
         << " 데이터=" << msg << std::endl;
 }
 
-void PacketManager::handlePacket(Client& client, int packetId, const std::string& rawMsg) {
+void PacketManager::handlePacket(const Client& client, int packetId, const std::string& rawMsg) {
     std::cout << "수신: ID=" << packetId << " 데이터=" << rawMsg << std::endl;
 
     switch (packetId) {
@@ -28,7 +43,7 @@ void PacketManager::handlePacket(Client& client, int packetId, const std::string
         size_t first = rawMsg.find(',');
         size_t second = rawMsg.find(',', first + 1);
         if (first == std::string::npos || second == std::string::npos) {
-            PacketManager::sendPacket(client.socket, PacketType::SignupIDError, "잘못된 요청");
+            sendPacket(client.socket, PacketType::SignupIDError, "잘못된 요청");
             break;
         }
 
@@ -41,23 +56,29 @@ void PacketManager::handlePacket(Client& client, int packetId, const std::string
 
         int resultType = PacketType::SignupSuccess;
         if (mgr.addAccount(newAcc, resultType)) {
+            // 가입 성공 → UserData.csv 등 생성
             UserDataManager::createUserData(id);
-            PacketManager::sendPacket(client.socket, resultType, id);
+
+            sendPacket(client.socket, PacketType::SignupSuccess, id);
+            std::cout << "[회원가입 성공] ID=" << id << " NickName=" << nickname << std::endl;
         }
         else {
             if (resultType == PacketType::SignupIDError) {
-                PacketManager::sendPacket(client.socket, PacketType::SignupIDError, id);
+                sendPacket(client.socket, PacketType::SignupIDError, id);
+                std::cout << "[회원가입 실패] 이미 존재하는 ID=" << id << std::endl;
             }
             else if (resultType == PacketType::SignupNickError) {
-                PacketManager::sendPacket(client.socket, PacketType::SignupNickError, nickname);
+                sendPacket(client.socket, PacketType::SignupNickError, nickname);
+                std::cout << "[회원가입 실패] 이미 존재하는 NickName=" << nickname << std::endl;
             }
             else {
-                // 여기선 그냥 "서버 내부 오류" 명확히 표시
-                PacketManager::sendPacket(client.socket, -1, "Internal Error");
+                sendPacket(client.socket, -1, "Internal Error");
+                std::cout << "[회원가입 실패] 서버 내부 오류" << std::endl;
             }
         }
         break;
     }
+
     case PacketType::Login: {
         std::cout << "[로그인 요청] " << rawMsg << std::endl;
 
@@ -81,6 +102,12 @@ void PacketManager::handlePacket(Client& client, int packetId, const std::string
                 if (acc.password == pw) {
                     sendPacket(client.socket, PacketType::LoginSuccess, acc.nickname);
                     std::cout << "[로그인 성공] ID=" << id << " NickName=" << acc.nickname << std::endl;
+
+                    if (s_clients) {
+                        (*s_clients)[id] = client;
+                        std::cout << "[클라이언트 등록] userId=" << id
+                            << " socket=" << client.socket << std::endl;
+                    }
                 }
                 else {
                     sendPacket(client.socket, PacketType::LoginPWError, id);
@@ -417,6 +444,311 @@ void PacketManager::handlePacket(Client& client, int packetId, const std::string
             PacketManager::sendPacket(client.socket, PacketType::ResponseReplaceUserMagic, "마법 교체 성공");
         }
 
+        break;
+    }
+    case PacketType::RequestMatching:
+    {
+        std::string userId = Trim(rawMsg);
+        s_match->HandleRequestMatching(userId);
+        break;
+    }
+    case PacketType::CancelMatch:
+    {
+        std::string userId = Trim(rawMsg);
+        if (!userId.empty()) {
+            s_match->HandleCancelMatch(userId);
+        }
+        break;
+    }
+    case PacketType::RequestMagicCooldowns:
+    {
+        std::string userId = Trim(rawMsg);
+        std::cout << "[RequestMagicCooldowns] userId=" << userId << std::endl;
+
+        // 1) UserMagic.csv 에서 유저의 4개 슬롯 읽기
+        std::vector<int> magicIds;
+        {
+            std::ifstream in("UserMagic.csv");
+            if (!in.is_open()) {
+                std::cerr << "[에러] UserMagic.csv 열기 실패" << std::endl;
+                sendPacket(client.socket, PacketType::ResponseUserMagicCooldowns, "Error:FileNotFound");
+                break;
+            }
+
+            std::string line;
+            bool firstLine = true;
+            while (std::getline(in, line)) {
+                if (firstLine) { firstLine = false; continue; }
+                if (line.empty()) continue;
+
+                std::stringstream ss(line);
+                std::string csvId, m0, m1, m2, m3;
+                std::getline(ss, csvId, ',');
+                std::getline(ss, m0, ',');
+                std::getline(ss, m1, ',');
+                std::getline(ss, m2, ',');
+                std::getline(ss, m3, ',');
+
+                if (csvId == userId) {
+                    if (!m0.empty()) magicIds.push_back(std::stoi(m0));
+                    if (!m1.empty()) magicIds.push_back(std::stoi(m1));
+                    if (!m2.empty()) magicIds.push_back(std::stoi(m2));
+                    if (!m3.empty()) magicIds.push_back(std::stoi(m3));
+                    break;
+                }
+            }
+            in.close();
+        }
+
+        if (magicIds.empty()) {
+            std::cerr << "[경고] 유저 " << userId << " 의 마법 슬롯이 비어있음" << std::endl;
+            sendPacket(client.socket, PacketType::ResponseUserMagicCooldowns, "Error:NoMagic");
+            break;
+        }
+
+        // 2) CardTable.csv 에서 각 카드의 속성 찾기
+        // CSV 포맷: ID,Name,Attack,Cooldown,Cost,EffectType,Speed,Radius,Duration,Amount
+        std::unordered_map<int, std::string> cardInfo;
+        {
+            std::ifstream in("CardTable.csv");
+            if (!in.is_open()) {
+                std::cerr << "[에러] CardTable.csv 열기 실패" << std::endl;
+                sendPacket(client.socket, PacketType::ResponseUserMagicCooldowns, "Error:CardTableNotFound");
+                break;
+            }
+
+            std::string line;
+            bool firstLine = true;
+            while (std::getline(in, line)) {
+                if (firstLine) { firstLine = false; continue; }
+                if (line.empty()) continue;
+
+                std::stringstream ss(line);
+                std::string idStr, name, attack, cooldown, cost, effect, speed, radius, duration, amount;
+                std::getline(ss, idStr, ',');
+                std::getline(ss, name, ',');
+                std::getline(ss, attack, ',');
+                std::getline(ss, cooldown, ',');
+                std::getline(ss, cost, ',');
+                std::getline(ss, effect, ',');
+                std::getline(ss, speed, ',');
+                std::getline(ss, radius, ',');
+                std::getline(ss, duration, ',');
+                std::getline(ss, amount, ',');
+
+                int id = std::stoi(idStr);
+                // 클라에서 원하는 포맷: "ID:Cooldown:Attack:Speed:Radius:Duration:Amount"
+                std::string formatted = idStr + ":" + cooldown + ":" + attack + ":" +
+                    speed + ":" + radius + ":" + duration + ":" + amount;
+                cardInfo[id] = formatted;
+            }
+            in.close();
+        }
+
+        // 3) 유저의 슬롯 순서대로 응답 문자열 생성
+        std::string response;
+        for (size_t i = 0; i < magicIds.size(); i++) {
+            int id = magicIds[i];
+            if (cardInfo.find(id) != cardInfo.end()) {
+                if (!response.empty()) response += ",";
+                response += cardInfo[id];
+            }
+        }
+
+        if (response.empty()) {
+            response = "Error:NoCardData";
+        }
+
+        // 4) 클라이언트에 전송
+        sendPacket(client.socket, PacketType::ResponseUserMagicCooldowns, response);
+        std::cout << "[ResponseUserMagicCooldowns] userId=" << userId
+            << " → " << response << std::endl;
+
+        break;
+    }
+    case PacketType::Move:
+    {
+        //std::cout << "[Move] 데이터=" << rawMsg << std::endl;
+
+        // msg 예: "qwe,2.35,-1.20"
+        std::stringstream ss(rawMsg);
+        std::string userId, xStr, yStr;
+        std::getline(ss, userId, ',');
+        std::getline(ss, xStr, ',');
+        std::getline(ss, yStr, ',');
+
+        if (userId.empty() || xStr.empty() || yStr.empty())
+        {
+            std::cerr << "[Move] 잘못된 데이터: " << rawMsg << std::endl;
+            break;
+        }
+
+        float x = std::stof(xStr);
+        float y = std::stof(yStr);
+
+        // 다른 클라이언트에게만 전송
+        for (auto& kv : *s_clients)
+        {
+            const std::string& targetId = kv.first;
+            SOCKET sock = kv.second.socket;
+
+            if (targetId == userId)
+                continue; // 자기 자신은 스킵
+
+            // 상대 클라에게는 y 반전
+            float sendX = x;
+            float sendY = -y;
+
+            std::string payload = userId + "," + std::to_string(sendX) + "," + std::to_string(sendY);
+            sendPacket(sock, PacketType::Move, payload);
+
+            std::cout << "[서버→클라] 대상=" << targetId
+                << " 상대=" << userId
+                << " 이동=" << payload << std::endl;
+        }
+
+        break;
+    }
+    case PacketType::CastMagic:
+    {
+        // msg: "userId,cardId,x,y,dirX,dirY"
+        std::stringstream ss(rawMsg);
+        std::string userId, cardIdStr, xStr, yStr, dirXStr, dirYStr;
+        std::getline(ss, userId, ',');
+        std::getline(ss, cardIdStr, ',');
+        std::getline(ss, xStr, ',');
+        std::getline(ss, yStr, ',');
+        std::getline(ss, dirXStr, ',');
+        std::getline(ss, dirYStr, ',');
+
+        int cardId = std::stoi(cardIdStr);
+        float x = std::stof(xStr);
+        float y = std::stof(yStr);
+        float dirX = std::stof(dirXStr);
+        float dirY = std::stof(dirYStr);
+
+        // --- CardTable.csv 에서 해당 카드 속성 읽기 ---
+        int attack = 0;
+        float speed = 0.0f;
+        {
+            std::ifstream in("CardTable.csv");
+            if (in.is_open())
+            {
+                std::string line;
+                bool firstLine = true;
+                while (std::getline(in, line))
+                {
+                    if (firstLine) { firstLine = false; continue; }
+                    if (line.empty()) continue;
+
+                    std::stringstream ss(line);
+                    std::string idStr, name, attackStr, cooldown, cost, effect, speedStr, radius, duration, amount;
+                    std::getline(ss, idStr, ',');
+                    std::getline(ss, name, ',');
+                    std::getline(ss, attackStr, ',');
+                    std::getline(ss, cooldown, ',');
+                    std::getline(ss, cost, ',');
+                    std::getline(ss, effect, ',');
+                    std::getline(ss, speedStr, ',');
+                    std::getline(ss, radius, ',');
+                    std::getline(ss, duration, ',');
+                    std::getline(ss, amount, ',');
+
+                    if (std::stoi(idStr) == cardId)
+                    {
+                        attack = std::stoi(attackStr);
+                        speed = std::stof(speedStr);
+                        break;
+                    }
+                }
+                in.close();
+            }
+        }
+
+        // --- 다른 클라들에게 전달 ---
+        for (auto& kv : *s_clients)
+        {
+            if (kv.first == userId) continue;
+
+            SOCKET sock = kv.second.socket;
+
+            float sendX = x;
+            float sendY = -y;
+            float sendDirX = dirX;
+            float sendDirY = -dirY;
+
+            std::string payload =
+                userId + "," + cardIdStr + "," +
+                std::to_string(sendX) + "," +
+                std::to_string(sendY) + "," +
+                std::to_string(sendDirX) + "," +
+                std::to_string(sendDirY) + "," +
+                std::to_string(attack) + "," +
+                std::to_string(speed);
+
+            sendPacket(sock, PacketType::SpawnMagic, payload);
+
+            /*std::cout << "[서버→클라] SpawnMagic 대상=" << kv.first
+                << " 상대=" << userId
+                << " 데이터=" << payload << std::endl;*/
+        }
+
+        break;
+    }
+    case PacketType::Hit:
+    {
+        // msg: "targetUserId,damage"
+        std::stringstream ss(rawMsg);
+        std::string targetId, damageStr;
+        std::getline(ss, targetId, ',');
+        std::getline(ss, damageStr, ',');
+
+        if (targetId.empty() || damageStr.empty()) {
+            std::cerr << "[Hit] 잘못된 데이터: " << rawMsg << std::endl;
+            break;
+        }
+
+        int damage = std::stoi(damageStr);
+
+        // 브로드캐스트 (맞은 유저 ID, 데미지)
+        std::string payload = targetId + "," + std::to_string(damage);
+        for (auto& kv : *s_clients)
+        {
+            sendPacket(kv.second.socket, PacketType::DamageResult, payload);
+        }
+
+        std::cout << "[Hit] target=" << targetId
+            << " damage=" << damage << std::endl;
+        break;
+    }
+    case PacketType::Die:
+    {
+        // msg: "userId"
+        std::string deadUserId = rawMsg;
+
+        std::string opponentId;
+        for (auto& kv : *s_clients)
+        {
+            if (kv.first != deadUserId)
+            {
+                opponentId = kv.first;
+                break;
+            }
+        }
+
+        // 죽은 유저 → 패배
+        if (s_clients->count(deadUserId))
+        {
+            sendPacket((*s_clients)[deadUserId].socket, PacketType::Defeat, "LOSE");
+        }
+
+        // 상대 유저 → 승리
+        if (s_clients->count(opponentId))
+        {
+            sendPacket((*s_clients)[opponentId].socket, PacketType::Victory, "WIN");
+        }
+
+        std::cout << "[Game] " << deadUserId << " 패배, " << opponentId << " 승리" << std::endl;
         break;
     }
 
