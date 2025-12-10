@@ -1,18 +1,25 @@
 #pragma once
-#include <string>
 #include <unordered_map>
-#include "Client.h"
+#include <string>
+
 #include "PacketType.h"
 
-class MatchManager; // 전방 선언
+class Session;
+class MatchManager;
+class IOCP_Send;
 
-class PacketManager {
+class PacketManager
+{
 public:
-    static void Init(std::unordered_map<std::string, Client>* clients, MatchManager* mm);
-    static void handlePacket(const Client& client, int packetId, const std::string& rawMsg);
-    static void sendPacket(SOCKET sock, int packetId, const std::string& msg);
+    static void Init(std::unordered_map<std::string, Session*>* userMap,
+        MatchManager* matchMgr,
+        IOCP_Send* sendProc);
+
+    static void SendPacket(Session* session, int packetId, const std::string& msg);
+    static void HandlePacket(Session* session, int packetId, const std::string& body);
 
 private:
-    static std::unordered_map<std::string, Client>* s_clients; // 선언만
-    static MatchManager* s_match; // 선언만
+    static std::unordered_map<std::string, Session*>* s_userMap;
+    static MatchManager* s_matchMgr;
+    static IOCP_Send* s_sendProc;       // Send 담당 객체
 };

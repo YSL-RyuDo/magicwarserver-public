@@ -3,29 +3,26 @@
 #include <vector>
 #include <mutex>
 
-struct UserAccount {
+struct UserAccount
+{
     std::string id;
     std::string password;
     std::string nickname;
 };
 
-class UserAccountManager {
-private:
-    std::string filePath;
-    static std::mutex fileMutex;
-
-    // 락 없는 내부 로드 (addAccount 등에서 사용)
-    bool loadUnlocked(std::vector<UserAccount>& accounts);
-
+class UserAccountManager
+{
 public:
-    UserAccountManager(const std::string& path);
+    UserAccountManager(const std::string& filePath);
 
-    // 외부에서 안전하게 호출할 때
-    bool load(std::vector<UserAccount>& accounts);
+    bool AddAccount(const UserAccount& acc, int& errorType);
+    bool CheckLogin(const std::string& id, const std::string& pw, std::string& nickname);
 
-    // 계정 추가
-    bool addAccount(const UserAccount& newAccount, int& errorType);
+private:
+    bool LoadUnlocked(std::vector<UserAccount>& out);
+    bool Load(std::vector<UserAccount>& out);
 
-    // 로그인 확인
-    bool checkLogin(const std::string& id, const std::string& password, std::string& nickname);
+private:
+    std::string path_;
+    static std::mutex fileMutex_;
 };

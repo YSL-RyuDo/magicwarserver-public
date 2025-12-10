@@ -2,29 +2,47 @@
 #include <fstream>
 #include <iostream>
 
-std::mutex UserDataManager::fileMutex;
+std::mutex UserDataManager::fileMutex_;
 
-bool fileExists(const std::string& path) {
+UserDataManager::UserDataManager(
+    const std::string& statsPath,
+    const std::string& magicPath,
+    const std::string& recordPath)
+    : statsPath_(statsPath)
+    , magicPath_(magicPath)
+    , recordPath_(recordPath)
+{
+}
+
+bool UserDataManager::FileExists(const std::string& path)
+{
     std::ifstream f(path);
     return f.good();
 }
 
-void UserDataManager::appendLine(const std::string& path, const std::string& header, const std::string& line) {
-    std::lock_guard<std::mutex> lock(fileMutex);
+void UserDataManager::AppendLine(
+    const std::string& path,
+    const std::string& header,
+    const std::string& line)
+{
+    std::lock_guard<std::mutex> lock(fileMutex_);
 
-    bool fileExistsFlag = fileExists(path);
+    bool exists = FileExists(path);
     std::ofstream out;
 
-    if (fileExistsFlag) {
+    if (exists)
+    {
         out.open(path, std::ios::app);
     }
-    else {
+    else
+    {
         out.open(path);
         out << header << "\n";
     }
 
-    if (!out.is_open()) {
-        std::cerr << "[파일 열기 실패] " << path << std::endl;
+    if (!out.is_open())
+    {
+        std::cerr << "[UserDataManager] 파일 열기 실패: " << path << "\n";
         return;
     }
 
@@ -32,10 +50,29 @@ void UserDataManager::appendLine(const std::string& path, const std::string& hea
     out.close();
 }
 
-void UserDataManager::createUserData(const std::string& id) {
-    appendLine("UserStats.csv", "ID,MMR,RANK,RANKSCORE", id + ",1000,0,0");
-    appendLine("UserMagic.csv", "ID,MAGIC0,MAGIC1,MAGIC2,MAGIC3", id + ",0,1,2,3");
-    appendLine("UserRecord.csv", "ID,LEVEL,EXP,WIN,LOSE", id + ",1,0,0,0");
+bool UserDataManager::CreateUserData(const std::string& id)
+{
+    // MMR, RANK, RANKSCORE 초기화
+    AppendLine(
+        statsPath_,
+        "ID,MMR,RANK,RANKSCORE",
+        id + ",1000,0,0"
+    );
 
-    std::cout << "[유저 데이터 생성 완료] ID=" << id << std::endl;
+    // MAGIC 4개 초기값 설정
+    AppendLine(
+        magicPath_,
+        "ID,MAGIC0,MAGIC1,MAGIC2,MAGIC3",
+        id + ",0,1,2,3"
+    );
+
+    // LEVEL, EXP, WIN, LOSE 초기화
+    AppendLine(
+        recordPath_,
+        "ID,LEVEL,EXP,WIN,LOSE",
+        id + ",1,0,0,0"
+    );
+
+    std::cout << "[UserDataManager] 유저 데이터 생성 완료 → " << id << "\n";
+    return true;
 }

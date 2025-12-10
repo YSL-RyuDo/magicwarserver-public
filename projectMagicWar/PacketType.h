@@ -1,36 +1,43 @@
 #pragma once
 
-enum PacketType {
-    Signup = 0,
-    Login = 1,
-    SignupSuccess = 2,
-    SignupNickError = 3,
-    SignupIDError = 4,
-    LoginSuccess = 5,
-    LoginIDError = 6,
-    LoginPWError = 7,
-    RequestProfile = 8,
-    ResponseProfile = 9,
-    RequestUserMagic = 10,   // 유저 마법 슬롯 요청
-    ResponseUserMagic = 11,   // 유저 마법 슬롯 응답
-    RequestSetUserMagic = 12,    // 슬롯 변경 요청 (클라 → 서버)
-    ResponseSetUserMagic = 13,
-    RequestReplaceUserMagic = 14,
-	ResponseReplaceUserMagic = 15,
+enum PacketType
+{
+    PKT_SIGNUP = 0,
+    PKT_LOGIN = 1,
+    PKT_SIGNUP_OK = 2,
+    PKT_SIGNUP_ID_EXISTS = 3,
+    PKT_SIGNUP_NICK_EXISTS = 4,
+    PKT_LOGIN_OK = 5,
+    PKT_LOGIN_ID_FAIL = 6,
+    PKT_LOGIN_PW_FAIL = 7,
 
-	RequestMatching = 16,
-	ResponseMatching = 17,
-    CancelMatch = 18,
+    PKT_REQ_PROFILE = 8,
+    PKT_RES_PROFILE = 9,
 
-    RequestMagicCooldowns = 19,
-    ResponseUserMagicCooldowns = 20,
-    Move = 21,
-    CastMagic = 22,
-    SpawnMagic = 23,
-    UpdateMagic = 24,
-    Hit = 25,
-	DamageResult = 26,
-	Die = 27,
-	Defeat = 28,
-	Victory = 29,
+    PKT_REQ_USER_MAGIC = 10,
+    PKT_RES_USER_MAGIC = 11,
+
+    PKT_REQ_MAGIC_INFO = 12,
+    PKT_RES_MAGIC_INFO = 13,
+
+    PKT_REQ_REPLACE_MAGIC = 14,
+    PKT_RES_REPLACE_MAGIC = 15,
+
+    PKT_MATCH_REQUEST = 16,
+    PKT_MATCH_READY = 17,
+    PKT_MATCH_CANCEL = 18,
+    PKT_MATCH_CANCEL_OK = 19,
+    PKT_MATCH_WAIT = 20,
+
+    PKT_REQ_MAGIC_COOLDOWN = 21,
+    PKT_RES_MAGIC_COOLDOWN = 22,
+
+    PKT_MOVE = 30,
+    PKT_CAST_MAGIC = 31,
+    PKT_SPAWN_MAGIC = 32,
+    PKT_HIT = 33,
+    PKT_DAMAGE = 34,
+    PKT_DIE = 35,
+    PKT_RESULT_WIN = 36,
+    PKT_RESULT_LOSE = 37
 };

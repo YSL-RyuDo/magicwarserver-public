@@ -4,93 +4,114 @@
 #include <sstream>
 #include <iostream>
 
-std::mutex UserAccountManager::fileMutex;
+std::mutex UserAccountManager::fileMutex_;
 
-UserAccountManager::UserAccountManager(const std::string& path)
-    : filePath(path) {
+UserAccountManager::UserAccountManager(const std::string& filePath)
+    : path_(filePath)
+{
 }
 
-bool UserAccountManager::loadUnlocked(std::vector<UserAccount>& accounts) {
-    std::ifstream in(filePath);
+// 락 없이 읽기(내부 사용)
+bool UserAccountManager::LoadUnlocked(std::vector<UserAccount>& out)
+{
+    std::ifstream in(path_);
     if (!in.is_open()) return false;
 
-    accounts.clear();
+    out.clear();
     std::string line;
-    bool firstLine = true;
-    while (std::getline(in, line)) {
-        if (firstLine) { firstLine = false; continue; }
+
+    bool first = true;
+    while (std::getline(in, line))
+    {
+        if (first) { first = false; continue; }  // header skip
         if (line.empty()) continue;
 
         std::stringstream ss(line);
+
         std::string id, pw, nick;
         std::getline(ss, id, ',');
         std::getline(ss, pw, ',');
         std::getline(ss, nick, ',');
 
-        accounts.push_back({ id, pw, nick });
+        out.push_back({ id, pw, nick });
     }
     return true;
 }
 
-bool UserAccountManager::load(std::vector<UserAccount>& accounts) {
-    std::lock_guard<std::mutex> lock(fileMutex);
-    return loadUnlocked(accounts);
+// 락 걸고 읽기
+bool UserAccountManager::Load(std::vector<UserAccount>& out)
+{
+    std::lock_guard<std::mutex> lock(fileMutex_);
+    return LoadUnlocked(out);
 }
 
-bool UserAccountManager::addAccount(const UserAccount& newAccount, int& errorType) {
-    std::lock_guard<std::mutex> lock(fileMutex);
+// 회원가입
+bool UserAccountManager::AddAccount(const UserAccount& acc, int& errorType)
+{
+    std::lock_guard<std::mutex> lock(fileMutex_);
 
     std::vector<UserAccount> accounts;
-    loadUnlocked(accounts); // deadlock 없음
+    LoadUnlocked(accounts);   // deadlock 없음
 
-    for (auto& acc : accounts) {
-        if (acc.id == newAccount.id) {
-            errorType = PacketType::SignupIDError;
+    for (auto& a : accounts)
+    {
+        if (a.id == acc.id)
+        {
+            errorType = PKT_SIGNUP_ID_EXISTS;
             return false;
         }
-        if (acc.nickname == newAccount.nickname) {
-            errorType = PacketType::SignupNickError;
+        if (a.nickname == acc.nickname)
+        {
+            errorType = PKT_SIGNUP_NICK_EXISTS;
             return false;
         }
     }
 
-    bool fileExists = !accounts.empty();
+    bool exists = !accounts.empty();
     std::ofstream out;
 
-    if (fileExists) out.open(filePath, std::ios::app);
-    else {
-        out.open(filePath);
-        out << "ID,Password,NickName\n";
+    if (exists)
+        out.open(path_, std::ios::app);
+    else
+    {
+        out.open(path_);
+        out << "ID,Password,Nickname\n";
     }
 
-    if (!out.is_open()) {
-        errorType = PacketType::SignupIDError;
+    if (!out.is_open())
+    {
+        std::cerr << "[UserAccountManager] 파일쓰기 실패\n";
+        errorType = PKT_SIGNUP_ID_EXISTS;
         return false;
     }
 
-    out << newAccount.id << "," << newAccount.password << "," << newAccount.nickname << "\n";
+    out << acc.id << "," << acc.password << "," << acc.nickname << "\n";
     out.close();
 
-    errorType = PacketType::SignupSuccess;
+    errorType = PKT_SIGNUP_OK;
     return true;
 }
 
-bool UserAccountManager::checkLogin(const std::string& id, const std::string& password, std::string& nickname) {
-    std::lock_guard<std::mutex> lock(fileMutex);
+// 로그인
+bool UserAccountManager::CheckLogin(const std::string& id, const std::string& pw, std::string& nickname)
+{
+    std::lock_guard<std::mutex> lock(fileMutex_);
 
     std::vector<UserAccount> accounts;
-    loadUnlocked(accounts);
+    LoadUnlocked(accounts);
 
-    for (auto& acc : accounts) {
-        if (acc.id == id) {
-            if (acc.password == password) {
-                nickname = acc.nickname;
+    for (auto& a : accounts)
+    {
+        if (a.id == id)
+        {
+            if (a.password == pw)
+            {
+                nickname = a.nickname;
                 return true;
             }
-            else {
-                return false; // PW 불일치
-            }
+            else
+                return false; // pw mismatch
         }
     }
-    return false; // ID 없음
+    return false; // no ID
 }

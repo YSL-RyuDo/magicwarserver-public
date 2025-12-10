@@ -1,13 +1,19 @@
-#include "GameServer.h"
 #include <iostream>
+#include "IOCP_GameServer.h"
+using namespace std;
 
-int main() {
-    try {
-        GameServer server(7777);
-        server.start();
+int main()
+{
+    IOCP_GameServer server(9000);
+
+    server.Start();
+
+    while (true)
+    {
+        char c;
+        cin >> c;
+        if (c == 'q') break;
     }
-    catch (const std::exception& e) {
-        std::cerr << "서버 오류: " << e.what() << std::endl;
-    }
-    return 0;
+    
+    server.Stop();
 }

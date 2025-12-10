@@ -76,7 +76,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -91,6 +91,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -128,24 +129,53 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Client.cpp" />
-    <ClCompile Include="GameServer.cpp" />
+    <ClCompile Include="..\Util\SHA256.cpp" />
+    <ClCompile Include="BufferBlock.cpp" />
+    <ClCompile Include="BufferPool.cpp" />
+    <ClCompile Include="CooldownManager.cpp" />
+    <ClCompile Include="IOCP_Defines.cpp" />
+    <ClCompile Include="IOCP_GameServer.cpp" />
+    <ClCompile Include="IOCP_Recv.cpp" />
+    <ClCompile Include="IOCP_Send.cpp" />
+    <ClCompile Include="MagicManager.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MatchManager.cpp" />
+    <ClCompile Include="OverlappedEx.cpp" />
+    <ClCompile Include="OverlappedPool.cpp" />
     <ClCompile Include="PacketManager.cpp" />
+    <ClCompile Include="PacketParser.cpp" />
     <ClCompile Include="PacketType.cpp" />
+    <ClCompile Include="PasswordHasher.cpp" />
+    <ClCompile Include="ProfileManager.cpp" />
+    <ClCompile Include="Session.cpp" />
+    <ClCompile Include="SessionPool.cpp" />
     <ClCompile Include="UserAccountManager.cpp" />
     <ClCompile Include="UserDataManager.cpp" />
+    <ClCompile Include="UserManager.cpp" />
     <ClCompile Include="Utils.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Client.h" />
-    <ClInclude Include="GameServer.h" />
+    <ClInclude Include="..\Util\SHA256.h" />
+    <ClInclude Include="BufferPool.h" />
+    <ClInclude Include="CooldownManager.h" />
+    <ClInclude Include="IOCP_Defines.h" />
+    <ClInclude Include="IOCP_GameServer.h" />
+    <ClInclude Include="IOCP_Recv.h" />
+    <ClInclude Include="IOCP_Send.h" />
+    <ClInclude Include="MagicManager.h" />
     <ClInclude Include="MatchManager.h" />
+    <ClInclude Include="OverlappedEx.h" />
+    <ClInclude Include="OverlappedPool.h" />
     <ClInclude Include="PacketManager.h" />
+    <ClInclude Include="PacketParser.h" />
     <ClInclude Include="PacketType.h" />
+    <ClInclude Include="PasswordHasher.h" />
+    <ClInclude Include="ProfileManager.h" />
+    <ClInclude Include="Session.h" />
+    <ClInclude Include="SessionPool.h" />
     <ClInclude Include="UserAccountManager.h" />
     <ClInclude Include="UserDataManager.h" />
+    <ClInclude Include="UserManager.h" />
     <ClInclude Include="Utils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
