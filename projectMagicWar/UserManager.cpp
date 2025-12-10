@@ -26,16 +26,15 @@ void UserManager::Init(const string& userFile, const string& infoFile)
     ID,Hash,Salt,Nick
 */
 
-bool UserManager::AddUser(const string& id, const string& pw, const string& nick)
+bool UserManager::AddUser(const string& id, const string& hash, const string& salt, const string& nick)
 {
     lock_guard<mutex> lock(s_mtx);
 
-    // 1) 중복 검사
     ifstream fin(s_userFile);
     if (fin.is_open())
     {
         string line;
-        getline(fin, line); // header skip
+        getline(fin, line);
 
         while (getline(fin, line))
         {
@@ -53,11 +52,6 @@ bool UserManager::AddUser(const string& id, const string& pw, const string& nick
         fin.close();
     }
 
-    // 2) Salt + 해시 생성
-    string salt = PasswordHasher::GenerateSalt(16);
-    string hash = PasswordHasher::Hash(pw, salt);
-
-    // 3) CSV에 저장
     ofstream fout(s_userFile, ios::app);
     if (!fout.is_open())
     {
@@ -68,6 +62,7 @@ bool UserManager::AddUser(const string& id, const string& pw, const string& nick
     fout << id << "," << hash << "," << salt << "," << nick << "\n";
     return true;
 }
+
 
 bool UserManager::IsIDExist(const string& id)
 {
@@ -94,6 +89,64 @@ bool UserManager::IsIDExist(const string& id)
     }
     return false;
 }
+
+bool UserManager::IsNickExist(const string& nick)
+{
+    lock_guard<mutex> lock(s_mtx);
+
+    ifstream fin(s_userFile);
+    if (!fin.is_open()) return false;
+
+    string line;
+    getline(fin, line); // 헤더 스킵
+
+    while (getline(fin, line))
+    {
+        stringstream ss(line);
+        string cid, chash, csalt, cnick;
+
+        getline(ss, cid, ',');
+        getline(ss, chash, ',');
+        getline(ss, csalt, ',');
+        getline(ss, cnick, ',');
+
+        if (cnick == nick)
+            return true;
+    }
+    return false;
+}
+
+bool UserManager::LoadUser(const string& id, string& outHash, string& outSalt, string& outNick)
+{
+    lock_guard<mutex> lock(s_mtx);
+
+    ifstream fin(s_userFile);
+    if (!fin.is_open()) return false;
+
+    string line;
+    getline(fin, line); // header skip
+
+    while (getline(fin, line))
+    {
+        stringstream ss(line);
+        string cid, chash, csalt, cnick;
+
+        getline(ss, cid, ',');
+        getline(ss, chash, ',');
+        getline(ss, csalt, ',');
+        getline(ss, cnick, ',');
+
+        if (cid != id) continue;
+
+        outHash = chash;
+        outSalt = csalt;
+        outNick = cnick;
+        return true;
+    }
+
+    return false;
+}
+
 
 /*
     로그인 검증:

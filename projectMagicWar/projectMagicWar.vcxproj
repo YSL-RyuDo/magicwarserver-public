@@ -144,6 +144,7 @@
     <ClCompile Include="OverlappedPool.cpp" />
     <ClCompile Include="PacketManager.cpp" />
     <ClCompile Include="PacketParser.cpp" />
+    <ClCompile Include="PacketStruct.cpp" />
     <ClCompile Include="PacketType.cpp" />
     <ClCompile Include="PasswordHasher.cpp" />
     <ClCompile Include="ProfileManager.cpp" />
@@ -168,6 +169,7 @@
     <ClInclude Include="OverlappedPool.h" />
     <ClInclude Include="PacketManager.h" />
     <ClInclude Include="PacketParser.h" />
+    <ClInclude Include="PacketStruct.h" />
     <ClInclude Include="PacketType.h" />
     <ClInclude Include="PasswordHasher.h" />
     <ClInclude Include="ProfileManager.h" />

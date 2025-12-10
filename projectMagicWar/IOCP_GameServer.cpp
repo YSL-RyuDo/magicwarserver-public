@@ -1,5 +1,6 @@
 #include "IOCP_GameServer.h"
 #include <iostream>
+#include <ws2tcpip.h> // InetNtopA 사용 위해 필요
 
 IOCP_GameServer::IOCP_GameServer(unsigned short port, int workerCount, int acceptCount)
     : port(port),
@@ -166,10 +167,39 @@ void IOCP_GameServer::WorkerThread()
     }
 }
 
+
+
 void IOCP_GameServer::AcceptCompletion(OverlappedEx* ov)
 {
     setsockopt(ov->acceptSock, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
         (char*)&listenSock, sizeof(listenSock));
+
+    SOCKADDR* localAddr = nullptr, * remoteAddr = nullptr;
+    int localLen = 0, remoteLen = 0;
+
+    fnGetAcceptExSockAddr(
+        ov->bufferPtr,
+        0,
+        sizeof(sockaddr_in) + 16,
+        sizeof(sockaddr_in) + 16,
+        &localAddr,
+        &localLen,
+        &remoteAddr,
+        &remoteLen
+    );
+
+    sockaddr_in* clientAddr = (sockaddr_in*)remoteAddr;
+
+    // -------------------------------
+    // 최신 방식 InetNtopA 사용
+    // -------------------------------
+    char ipStr[INET_ADDRSTRLEN] = { 0 };
+    InetNtopA(AF_INET, &clientAddr->sin_addr, ipStr, sizeof(ipStr));
+
+    printf("[ACCEPT] Client connected: %s:%d\n",
+        ipStr,
+        ntohs(clientAddr->sin_port));
+    // -------------------------------
 
     Session* session = sessionPool.Acquire();
     session->sock = ov->acceptSock;

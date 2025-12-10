@@ -7,19 +7,29 @@ static const int HEADER_SIZE = 4;
 
 void PacketParser::ProcessBuffer(Session* session)
 {
-    int packetId = 0;
-    std::string body;
+    char* buf = session->recvBuffer;
+    int& used = session->recvUsed;
 
-    // 여러 패킷이 한 번에 들어올 수 있음
-    while (ExtractPacket(session, packetId, body))
+    while (true)
     {
-        // 디버그 출력
-        // std::cout << "[Packet OK] ID=" << packetId << " Body=" << body << std::endl;
+        if (used < 4)
+            return;
 
-        // PacketManager로 전달
-        PacketManager::HandlePacket(session, packetId, body);
+        uint16_t pktId, bodySize;
+        memcpy(&pktId, buf, 2);
+        memcpy(&bodySize, buf + 2, 2);
+
+        int total = 4 + bodySize;
+        if (used < total)
+            return;
+
+        PacketManager::HandlePacket(session, pktId, buf + 4, bodySize);
+
+        memmove(buf, buf + total, used - total);
+        used -= total;
     }
 }
+
 
 bool PacketParser::ExtractPacket(Session* session, int& outPacketId, std::string& outBody)
 {

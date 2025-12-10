@@ -1,18 +1,15 @@
 #include <iostream>
 
 #include "PacketManager.h"
-#include "UserManager.h"
-#include "MatchManager.h"
 #include "IOCP_Send.h"
-
+#include "MatchManager.h"
+#include "UserManager.h"
+#include "PasswordHasher.h"
 
 std::unordered_map<std::string, Session*>* PacketManager::s_userMap = nullptr;
 MatchManager* PacketManager::s_matchMgr = nullptr;
 IOCP_Send* PacketManager::s_sendProc = nullptr;
 
-//===========================================================
-// 초기화
-//===========================================================
 void PacketManager::Init(std::unordered_map<std::string, Session*>* userMap,
     MatchManager* matchMgr,
     IOCP_Send* sendProc)
@@ -22,152 +19,159 @@ void PacketManager::Init(std::unordered_map<std::string, Session*>* userMap,
     s_sendProc = sendProc;
 }
 
-//===========================================================
-// 패킷 전송
-//===========================================================
-void PacketManager::SendPacket(Session* session, int packetId, const std::string& msg)
+void PacketManager::HandlePacket(Session* session, int packetId, const char* body, int bodySize)
 {
-    if (!session || session->closing) return;
-
-    char header[4];
-    memcpy(header, &packetId, 4);
-
-    std::string packet;
-    packet.append(header, 4);
-    packet.append(msg);
-
-    // ★ 객체 기반으로 변경
-    s_sendProc->EnqueueSend(session, packet.c_str(), packet.size());
-}
-
-//===========================================================
-// 수신 패킷 처리
-//===========================================================
-void PacketManager::HandlePacket(Session* session, int packetId, const std::string& body)
-{
-    std::cout << "[Packet] session=" << session->sessionId
-        << " id=" << packetId
-        << " body=" << body << std::endl;
+    std::cout << "---------------------------------------------\n";
+    std::cout << "[패킷] 도착 → session=" << session->sessionId
+        << ", packetId=" << packetId
+        << ", bodySize=" << bodySize << "\n";
 
     switch (packetId)
     {
-        //---------------------------------------------------------
-        // 회원가입
-        //---------------------------------------------------------
     case PKT_SIGNUP:
-    {
-        size_t p1 = body.find(',');
-        size_t p2 = body.find(',', p1 + 1);
-
-        if (p1 == std::string::npos || p2 == std::string::npos)
-        {
-            SendPacket(session, PKT_SIGNUP_ID_EXISTS, "1");
-            break;
-        }
-
-        std::string id = body.substr(0, p1);
-        std::string pw = body.substr(p1 + 1, p2 - p1 - 1);
-        std::string nick = body.substr(p2 + 1);
-
-        if (UserManager::IsIDExist(id))
-        {
-            SendPacket(session, PKT_SIGNUP_ID_EXISTS, "2");
-            break;
-        }
-
-        if (!UserManager::AddUser(id, pw, nick))
-        {
-            SendPacket(session, PKT_SIGNUP_NICK_EXISTS, "3");
-            break;
-        }
-
-        SendPacket(session, PKT_SIGNUP_OK, nick);
+        std::cout << "[회원가입] 요청 수신\n";
+        HandleSignup(session, body, bodySize);
         break;
-    }
 
-    //---------------------------------------------------------
-    // 로그인
-    //---------------------------------------------------------
     case PKT_LOGIN:
-    {
-        size_t pos = body.find(',');
-        std::string id = body.substr(0, pos);
-        std::string pw = body.substr(pos + 1);
-
-        std::string nick;
-
-        if (!UserManager::IsIDExist(id))
-        {
-            SendPacket(session, PKT_LOGIN_ID_FAIL, id);
-            std::cout << "[로그인 실패] 세션 " << session->sessionId << " → ID 없음\n";
-            break;
-        }
-
-        if (!UserManager::CheckLogin(id, pw, nick))
-        {
-            SendPacket(session, PKT_LOGIN_PW_FAIL, id);
-            std::cout << "[로그인 실패] 세션 " << session->sessionId << " → PW 불일치\n";
-            break;
-        }
-
-        session->authenticated = true;
-        session->userId = id;
-        session->nickname = nick;
-
-        (*s_userMap)[id] = session;
-
-        SendPacket(session, PKT_LOGIN_OK, nick);
-        std::cout << "[로그인 성공] 세션 " << session->sessionId << " → nick=" << nick << "\n";
-        break;
-    }
-
-    //---------------------------------------------------------
-    // 프로필 요청
-    //---------------------------------------------------------
-    case PKT_REQ_PROFILE:
-    {
-        std::string result = "nick,level,rank,score";
-        SendPacket(session, PKT_RES_PROFILE, result);
-        break;
-    }
-
-    //---------------------------------------------------------
-    // 매칭 요청
-    //---------------------------------------------------------
-    case PKT_MATCH_REQUEST:
-    {
-        if (!session->authenticated)
-        {
-            SendPacket(session, PKT_MATCH_CANCEL_OK, "NotLogin");
-            return;
-        }
-
-        s_matchMgr->RequestMatch(session);
-        break;
-    }
-
-    case PKT_MATCH_CANCEL:
-        s_matchMgr->CancelMatch(session);
+        std::cout << "[로그인] 요청 수신\n";
+        HandleLogin(session, body, bodySize);
         break;
 
-        //---------------------------------------------------------
-        // 이동 브로드캐스트
-        //---------------------------------------------------------
-    case PKT_MOVE:
-    {
-        for (auto& kv : *s_userMap)
-        {
-            Session* target = kv.second;
-            if (target == session) continue;
-
-            SendPacket(target, PKT_MOVE, session->userId + "," + body);
-        }
-        break;
-    }
-
-    //---------------------------------------------------------
     default:
-        std::cout << "[알 수 없는 패킷] id=" << packetId << std::endl;
+        std::cout << "[패킷] Unknown packet ID=" << packetId << "\n";
         break;
     }
+}
+
+void PacketManager::SendPacket(Session* session, uint16_t pktId, const void* data, uint16_t dataSize)
+{
+    if (!session || session->closing) return;
+
+    std::cout << "[전송] session=" << session->sessionId
+        << ", pktId=" << pktId
+        << ", size=" << dataSize << "\n";
+
+    // 실제 전송
+    uint16_t header[2];
+    header[0] = pktId;
+    header[1] = dataSize;
+
+    std::vector<char> buffer;
+    buffer.resize(4 + dataSize);
+
+    memcpy(buffer.data(), header, 4);
+    memcpy(buffer.data() + 4, data, dataSize);
+
+    s_sendProc->EnqueueSend(session, buffer.data(), (int)buffer.size());
+}
+
+void PacketManager::HandleSignup(Session* s, const char* body, int size)
+{
+    std::cout << "[회원가입] HandleSignup() 시작\n";
+
+    if (size != sizeof(PKT_SIGNUP_REQ))
+    {
+        std::cout << "[회원가입] 패킷 크기 오류 → size=" << size << "\n";
+        return;
+    }
+
+    PKT_SIGNUP_REQ req{};
+    memcpy(&req, body, sizeof(req));
+
+    std::string id(req.id);
+    std::string pw(req.pw);
+    std::string nick(req.nick);
+
+    std::cout << "[회원가입] 입력값 → ID=" << id
+        << ", PW=" << pw
+        << ", NICK=" << nick << "\n";
+
+    if (UserManager::IsIDExist(id))
+    {
+        std::cout << "[회원가입] 실패 → ID 중복\n";
+        SendSignupAck(s, PKT_SIGNUP_ID_EXISTS);
+        return;
+    }
+
+    if (UserManager::IsNickExist(nick))
+    {
+        std::cout << "[회원가입] 실패 → Nick 중복\n";
+        SendSignupAck(s, PKT_SIGNUP_NICK_EXISTS);
+        return;
+    }
+
+    std::cout << "[회원가입] 암호화 및 저장 진행\n";
+
+    std::string salt = PasswordHasher::GenerateSalt(16);
+    std::string hash = PasswordHasher::Hash(pw, salt);
+
+    UserManager::AddUser(id, hash, salt, nick);
+
+    std::cout << "[회원가입] 성공 → 응답 전송\n";
+    SendSignupAck(s, PKT_SIGNUP_OK);
+}
+
+void PacketManager::HandleLogin(Session* s, const char* body, int size)
+{
+    std::cout << "[로그인] HandleLogin() 시작\n";
+
+    if (size != sizeof(PKT_LOGIN_REQ))
+    {
+        std::cout << "[로그인] 패킷 크기 오류 → size=" << size << "\n";
+        return;
+    }
+
+    PKT_LOGIN_REQ req{};
+    memcpy(&req, body, sizeof(req));
+
+    std::string id(req.id);
+    std::string pw(req.pw);
+
+    std::cout << "[로그인] 입력값 → ID=" << id << ", PW=" << pw << "\n";
+
+    std::string dbHash, dbSalt, nick;
+
+    if (!UserManager::LoadUser(id, dbHash, dbSalt, nick))
+    {
+        std::cout << "[로그인] 실패 → ID 없음\n";
+        SendLoginAck(s, PKT_LOGIN_ID_FAIL, "");
+        return;
+    }
+
+    std::string computed = PasswordHasher::Hash(pw, dbSalt);
+
+    if (computed != dbHash)
+    {
+        std::cout << "[로그인] 실패 → PW 불일치\n";
+        SendLoginAck(s, PKT_LOGIN_PW_FAIL, "");
+        return;
+    }
+
+    std::cout << "[로그인] 성공 → nick=" << nick << "\n";
+    SendLoginAck(s, PKT_LOGIN_OK, nick);
+}
+
+void PacketManager::SendSignupAck(Session* s, uint16_t result)
+{
+    std::cout << "[회원가입] 응답 전송 → result=" << result << "\n";
+
+    PKT_SIGNUP_ACK ack{};
+    ack.result = result;
+
+    SendPacket(s, result, &ack, sizeof(ack));
+}
+
+void PacketManager::SendLoginAck(Session* s, uint16_t result, const std::string& nick)
+{
+    std::cout << "[로그인] 응답 전송 → result=" << result
+        << ", nick=" << nick << "\n";
+
+    PKT_LOGIN_ACK ack{};
+    ack.result = result;
+
+    if (result == PKT_LOGIN_OK)
+        memcpy(ack.nick, nick.c_str(), nick.size());
+
+    SendPacket(s, result, &ack, sizeof(ack));
 }

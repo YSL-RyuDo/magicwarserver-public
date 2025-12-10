@@ -20,10 +20,16 @@ public:
     static void Init(const string& userFile, const string& infoFile);
 
     // 회원가입
-    static bool AddUser(const string& id, const string& pw, const string& nick);
+    static bool AddUser(const string& id, const string& hash, const string& salt, const string& nick);
 
     // 아이디 존재 확인
     static bool IsIDExist(const string& id);
+
+    // 닉네임 존재 여부
+    static bool IsNickExist(const string& nick);
+
+    // 로그인용 전체 데이터 로드
+    static bool LoadUser(const string& id, string& outHash, string& outSalt, string& outNick);
 
     // 로그인
     static bool CheckLogin(const string& id, const string& pw, string& outNick);
