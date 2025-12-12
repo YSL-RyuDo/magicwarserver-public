@@ -10,5 +10,5 @@ public:
     static void ProcessBuffer(Session* session);
 
 private:
-    static bool ExtractPacket(Session* session, int& outPacketId, std::string& outBody);
+    //static bool ExtractPacket(Session* session, int& outPacketId, std::string& outBody);
 };

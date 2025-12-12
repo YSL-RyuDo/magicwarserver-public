@@ -60,4 +60,6 @@ public:
     int hp;
     bool inBattle;
     Session* battleOpponent;
+
+    uint32_t token = 0;
 };

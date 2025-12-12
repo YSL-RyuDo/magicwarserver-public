@@ -1,16 +1,39 @@
-#include <iostream>
+Ôªø#include "PacketManager.h"
 
-#include "PacketManager.h"
 #include "IOCP_Send.h"
-#include "MatchManager.h"
 #include "UserManager.h"
 #include "PasswordHasher.h"
+#include "MatchManager.h"
 
+#include <iostream>
+#include <random>
+#include <vector>
+#include <cstring>
+#include <algorithm>
+
+// ---------------------------
+// static members
+// ---------------------------
 std::unordered_map<std::string, Session*>* PacketManager::s_userMap = nullptr;
 MatchManager* PacketManager::s_matchMgr = nullptr;
 IOCP_Send* PacketManager::s_sendProc = nullptr;
+std::mutex PacketManager::s_userMapMtx;
+// ---------------------------
+// util
+// ---------------------------
+static uint32_t GenerateRandomToken()
+{
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<uint32_t> dis;
+    return dis(gen);
+}
 
-void PacketManager::Init(std::unordered_map<std::string, Session*>* userMap,
+// ---------------------------
+// Init
+// ---------------------------
+void PacketManager::Init(
+    std::unordered_map<std::string, Session*>* userMap,
     MatchManager* matchMgr,
     IOCP_Send* sendProc)
 {
@@ -19,62 +42,82 @@ void PacketManager::Init(std::unordered_map<std::string, Session*>* userMap,
     s_sendProc = sendProc;
 }
 
-void PacketManager::HandlePacket(Session* session, int packetId, const char* body, int bodySize)
+// ---------------------------
+// Packet Entry
+// ---------------------------
+void PacketManager::HandlePacket(
+    Session* session,
+    int packetId,
+    const char* body,
+    int bodySize)
 {
-    std::cout << "---------------------------------------------\n";
-    std::cout << "[∆–≈∂] µµ¬¯ °Ê session=" << session->sessionId
-        << ", packetId=" << packetId
-        << ", bodySize=" << bodySize << "\n";
-
     switch (packetId)
     {
     case PKT_SIGNUP:
-        std::cout << "[»∏ø¯∞°¿‘] ø‰√ª ºˆΩ≈\n";
         HandleSignup(session, body, bodySize);
         break;
 
     case PKT_LOGIN:
-        std::cout << "[∑Œ±◊¿Œ] ø‰√ª ºˆΩ≈\n";
         HandleLogin(session, body, bodySize);
+        break;
+    case PKT_LOGOUT:
+        HandleLogout(session);
+        break;
+    case PKT_REQ_PROFILE:
+        HandleProfileRequest(session, body, bodySize);
+        break;
+    case PKT_CHAT_LOBBY:
+        HandleLobbyChat(session, body, bodySize);
         break;
 
     default:
-        std::cout << "[∆–≈∂] Unknown packet ID=" << packetId << "\n";
+        std::cout << "[WARN] Unknown packetId=" << packetId << "\n";
         break;
     }
 }
 
-void PacketManager::SendPacket(Session* session, uint16_t pktId, const void* data, uint16_t dataSize)
+// ---------------------------
+// Send Packet
+// ---------------------------
+void PacketManager::SendPacket(
+    Session* session,
+    uint16_t packetId,
+    const void* data,
+    uint16_t dataSize)
 {
     if (!session || session->closing) return;
 
-    std::cout << "[¿¸º€] session=" << session->sessionId
-        << ", pktId=" << pktId
-        << ", size=" << dataSize << "\n";
+    PACKET_HEADER header{};
+    header.packetId = packetId;
+    header.token = session->token;
+    header.bodySize = dataSize;
 
-    // Ω«¡¶ ¿¸º€
-    uint16_t header[2];
-    header[0] = pktId;
-    header[1] = dataSize;
+    std::vector<char> buf(sizeof(PACKET_HEADER) + dataSize);
+    memcpy(buf.data(), &header, sizeof(header));
+    memcpy(buf.data() + sizeof(header), data, dataSize);
 
-    std::vector<char> buffer;
-    buffer.resize(4 + dataSize);
-
-    memcpy(buffer.data(), header, 4);
-    memcpy(buffer.data() + 4, data, dataSize);
-
-    s_sendProc->EnqueueSend(session, buffer.data(), (int)buffer.size());
+    s_sendProc->EnqueueSend(session, buf.data(), (int)buf.size());
 }
 
+void PacketManager::HandleSessionDisconnect(Session* s)
+{
+    if (!s) return;
+
+    if (!s->userId.empty())
+        UserManager::LogoutUser(s->userId);
+
+    s->Reset();
+}
+
+
+
+
+// ---------------------------
+// Signup
+// ---------------------------
 void PacketManager::HandleSignup(Session* s, const char* body, int size)
 {
-    std::cout << "[»∏ø¯∞°¿‘] HandleSignup() Ω√¿€\n";
-
-    if (size != sizeof(PKT_SIGNUP_REQ))
-    {
-        std::cout << "[»∏ø¯∞°¿‘] ∆–≈∂ ≈©±‚ ø¿∑˘ °Ê size=" << size << "\n";
-        return;
-    }
+    if (size != sizeof(PKT_SIGNUP_REQ)) return;
 
     PKT_SIGNUP_REQ req{};
     memcpy(&req, body, sizeof(req));
@@ -83,44 +126,36 @@ void PacketManager::HandleSignup(Session* s, const char* body, int size)
     std::string pw(req.pw);
     std::string nick(req.nick);
 
-    std::cout << "[»∏ø¯∞°¿‘] ¿‘∑¬∞™ °Ê ID=" << id
-        << ", PW=" << pw
-        << ", NICK=" << nick << "\n";
-
     if (UserManager::IsIDExist(id))
     {
-        std::cout << "[»∏ø¯∞°¿‘] Ω«∆– °Ê ID ¡ﬂ∫π\n";
         SendSignupAck(s, PKT_SIGNUP_ID_EXISTS);
         return;
     }
 
     if (UserManager::IsNickExist(nick))
     {
-        std::cout << "[»∏ø¯∞°¿‘] Ω«∆– °Ê Nick ¡ﬂ∫π\n";
         SendSignupAck(s, PKT_SIGNUP_NICK_EXISTS);
         return;
     }
-
-    std::cout << "[»∏ø¯∞°¿‘] æœ»£»≠ π◊ ¿˙¿Â ¡¯«‡\n";
 
     std::string salt = PasswordHasher::GenerateSalt(16);
     std::string hash = PasswordHasher::Hash(pw, salt);
 
     UserManager::AddUser(id, hash, salt, nick);
+    UserManager::CreateUserInfo(id);
+    UserManager::CreateUserMagic(id);
+    UserManager::CreateUserRank(id);
 
-    std::cout << "[»∏ø¯∞°¿‘] º∫∞¯ °Ê ¿¿¥‰ ¿¸º€\n";
     SendSignupAck(s, PKT_SIGNUP_OK);
 }
 
+// ---------------------------
+// Login
+// ---------------------------
 void PacketManager::HandleLogin(Session* s, const char* body, int size)
 {
-    std::cout << "[∑Œ±◊¿Œ] HandleLogin() Ω√¿€\n";
-
     if (size != sizeof(PKT_LOGIN_REQ))
-    {
-        std::cout << "[∑Œ±◊¿Œ] ∆–≈∂ ≈©±‚ ø¿∑˘ °Ê size=" << size << "\n";
         return;
-    }
 
     PKT_LOGIN_REQ req{};
     memcpy(&req, body, sizeof(req));
@@ -128,50 +163,202 @@ void PacketManager::HandleLogin(Session* s, const char* body, int size)
     std::string id(req.id);
     std::string pw(req.pw);
 
-    std::cout << "[∑Œ±◊¿Œ] ¿‘∑¬∞™ °Ê ID=" << id << ", PW=" << pw << "\n";
-
     std::string dbHash, dbSalt, nick;
 
+    // 1Ô∏è ID Ï°¥Ïû¨ Ïó¨Î∂Ä
     if (!UserManager::LoadUser(id, dbHash, dbSalt, nick))
     {
-        std::cout << "[∑Œ±◊¿Œ] Ω«∆– °Ê ID æ¯¿Ω\n";
-        SendLoginAck(s, PKT_LOGIN_ID_FAIL, "");
+        SendLoginAck(s, PKT_LOGIN_ID_FAIL);
         return;
     }
 
-    std::string computed = PasswordHasher::Hash(pw, dbSalt);
-
-    if (computed != dbHash)
+    // 2Ô∏è ÎπÑÎ∞ÄÎ≤àÌò∏ Í≤ÄÏ¶ù
+    if (PasswordHasher::Hash(pw, dbSalt) != dbHash)
     {
-        std::cout << "[∑Œ±◊¿Œ] Ω«∆– °Ê PW ∫“¿œƒ°\n";
-        SendLoginAck(s, PKT_LOGIN_PW_FAIL, "");
+        SendLoginAck(s, PKT_LOGIN_PW_FAIL);
         return;
     }
 
-    std::cout << "[∑Œ±◊¿Œ] º∫∞¯ °Ê nick=" << nick << "\n";
-    SendLoginAck(s, PKT_LOGIN_OK, nick);
+    if (!UserManager::TryLoginUser(id))
+    {
+        std::cout << "[LOGIN FAIL] already logged in: " << id << "\n";
+        SendLoginAck(s, PKT_LOGIN_ALREADY);
+        return;
+    }
+
+    // 4Ô∏è Î°úÍ∑∏Ïù∏ ÏÑ±Í≥µ Ï≤òÎ¶¨
+    s->userId = id;
+    s->nickname = nick;
+    s->authenticated = true;
+    s->token = GenerateRandomToken();
+
+    {
+        std::lock_guard<std::mutex> lock(s_userMapMtx);
+        (*s_userMap)[id] = s;
+    }
+
+    PKT_LOGIN_ACK ack{};
+    ack.result = PKT_LOGIN_OK;
+    ack.token = s->token;
+    memcpy(ack.nick, nick.c_str(), std::min<size_t>(31, nick.size()));
+
+    SendPacket(s, PKT_LOGIN_OK, &ack, sizeof(ack));
+
+    std::cout << "[LOGIN OK] user=" << id << "\n";
 }
 
+// ---------------------------
+// Profile
+// ---------------------------
+void PacketManager::HandleProfileRequest(Session* s, const char* body, int bodySize)
+{
+    std::cout << "[PROFILE] HandleProfileRequest ÏßÑÏûÖ\n";
+
+    if (!s)
+    {
+        std::cout << "[PROFILE] Session nullptr\n";
+        return;
+    }
+
+    std::cout << "[PROFILE] bodySize = " << bodySize << "\n";
+
+    if (bodySize != 32)
+    {
+        std::cout << "[PROFILE] bodySize Ïò§Î•ò\n";
+        return;
+    }
+
+    char idBuf[33]{};
+    memcpy(idBuf, body, 32);
+    std::string userId(idBuf);
+
+    std::cout << "[PROFILE] ÏöîÏ≤≠ userId = " << userId << "\n";
+    std::cout << "[PROFILE] ÏÑ∏ÏÖò userId = " << s->userId << "\n";
+    std::cout << "[PROFILE] authenticated = " << s->authenticated << "\n";
+
+    std::string nickname;
+    uint32_t level = 0, exp = 0;
+    uint32_t rank = 0, rankScore = 0;
+
+    if (!UserManager::LoadUserAccount(userId, nickname))
+    {
+        std::cout << "[PROFILE] LoadUserAccount Ïã§Ìå®\n";
+        return;
+    }
+
+    std::cout << "[PROFILE] nickname = " << nickname << "\n";
+
+    UserManager::LoadUserInfo(userId, level, exp);
+    UserManager::LoadUserRank(userId, rank, rankScore);
+
+    std::cout << "[PROFILE] level=" << level
+        << " exp=" << exp
+        << " rank=" << rank
+        << " score=" << rankScore << "\n";
+
+    RankInfo rankInfo{};
+    RankManager::GetRankInfo(rank, rankInfo);
+
+    std::cout << "[PROFILE] rankName=" << rankInfo.name
+        << " min=" << rankInfo.minScore
+        << " max=" << rankInfo.maxScore << "\n";
+
+    PKT_RES_PROFILE_DATA profile{};
+    memcpy(profile.nickname, nickname.c_str(),
+        std::min<size_t>(31, nickname.size()));
+
+    profile.level = level;
+    profile.exp = exp;
+    profile.rank = rank;
+    profile.rankScore = rankScore;
+
+    memcpy(profile.rankName, rankInfo.name.c_str(),
+        std::min<size_t>(15, rankInfo.name.size()));
+
+    profile.minScore = rankInfo.minScore;
+    profile.maxScore = rankInfo.maxScore;
+
+    std::cout << "[PROFILE] ÌîÑÎ°úÌïÑ Ìå®ÌÇ∑ Ï†ÑÏÜ°\n";
+
+    SendPacket(s, PKT_RES_PROFILE, &profile, sizeof(profile));
+
+    std::cout << "[PROFILE] HandleProfileRequest Ï¢ÖÎ£å\n";
+}
+
+
+
+void PacketManager::HandleLogout(Session* s)
+{
+    if (s->userId.empty())
+        return;
+
+    std::cout << "[LOGOUT] user=" << s->userId << "\n";
+
+    UserManager::LogoutUser(s->userId);
+
+    if (s_matchMgr)
+        s_matchMgr->CancelMatch(s);
+
+    s->authenticated = false;
+    s->userId.clear();
+    s->token = 0;
+}
+
+
+void PacketManager::HandleLobbyChat(Session* sender, const char* body, int bodySize)
+{
+    if (bodySize <= 0 || sender->inBattle)
+        return;
+
+    PKT_CHAT_LOBBY_DATA pkt{};
+    strncpy_s(pkt.nickname, sender->nickname.c_str(), 31);
+    memcpy(pkt.message, body, min(bodySize, 127));
+
+    std::lock_guard<std::mutex> lock(s_userMapMtx);
+
+    std::cout << "[LOBBY CHAT] ÏÜ°Ïã†Ïûê = "
+        << sender->userId
+        << " / Î©îÏãúÏßÄ = "
+        << pkt.message
+        << std::endl;
+
+    for (auto it = s_userMap->begin(); it != s_userMap->end(); ++it)
+    {
+        Session* session = it->second;
+
+        if (!session || session->closing)
+            continue;
+
+        if (session->inBattle)
+            continue;
+
+        //  Ïó¨Í∏∞ÏÑú ‚ÄúÎàÑÍµ¨ÏóêÍ≤å Î≥¥ÎÇ¥ÎäîÏßÄ‚Äù ÌôïÏù∏ Í∞ÄÎä•
+        std::cout << "  ‚Üí ÏàòÏã†Ïûê: "
+            << session->userId
+            << " (token=" << session->token << ")"
+            << std::endl;
+
+        SendPacket(session, PKT_CHAT_LOBBY, &pkt, sizeof(pkt));
+    }
+
+    std::cout << "[LOBBY CHAT] Î∏åÎ°úÎìúÏ∫êÏä§Ìä∏ ÏôÑÎ£å\n";
+}
+
+
+
+// ---------------------------
+// Ack helpers
+// ---------------------------
 void PacketManager::SendSignupAck(Session* s, uint16_t result)
 {
-    std::cout << "[»∏ø¯∞°¿‘] ¿¿¥‰ ¿¸º€ °Ê result=" << result << "\n";
-
     PKT_SIGNUP_ACK ack{};
     ack.result = result;
-
     SendPacket(s, result, &ack, sizeof(ack));
 }
 
-void PacketManager::SendLoginAck(Session* s, uint16_t result, const std::string& nick)
+void PacketManager::SendLoginAck(Session* s, uint16_t result)
 {
-    std::cout << "[∑Œ±◊¿Œ] ¿¿¥‰ ¿¸º€ °Ê result=" << result
-        << ", nick=" << nick << "\n";
-
     PKT_LOGIN_ACK ack{};
     ack.result = result;
-
-    if (result == PKT_LOGIN_OK)
-        memcpy(ack.nick, nick.c_str(), nick.size());
-
     SendPacket(s, result, &ack, sizeof(ack));
 }

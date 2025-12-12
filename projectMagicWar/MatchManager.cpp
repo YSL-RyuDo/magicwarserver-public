@@ -36,7 +36,7 @@ void MatchManager::RequestMatch(Session* session)
     if (alreadyInQueue)
     {
         memcpy(pkt.msg, "AlreadyWaiting", 15);
-        PacketManager::SendPacket(session, PKT_MATCH_WAIT, &pkt, sizeof(pkt));
+        //PacketManager::SendPacket(session, PKT_MATCH_WAIT, &pkt, sizeof(pkt));
         return;
     }
 
@@ -44,7 +44,7 @@ void MatchManager::RequestMatch(Session* session)
     matchQueue.push(session);
 
     memcpy(pkt.msg, "Wait", 4);
-    PacketManager::SendPacket(session, PKT_MATCH_WAIT, &pkt, sizeof(pkt));
+    //PacketManager::SendPacket(session, PKT_MATCH_WAIT, &pkt, sizeof(pkt));
 
     TryMatch();
 }
@@ -80,7 +80,7 @@ void MatchManager::CancelMatch(Session* session)
     else
         memcpy(pkt.msg, "NotInQueue", 11);
 
-    PacketManager::SendPacket(session, PKT_MATCH_CANCEL_OK, &pkt, sizeof(pkt));
+    //PacketManager::SendPacket(session, PKT_MATCH_CANCEL_OK, &pkt, sizeof(pkt));
 }
 
 //----------------------------------------------
@@ -109,8 +109,8 @@ void MatchManager::TryMatch()
         PKT_MATCH_READY_ACK pktB{};
         memcpy(pktB.opponent, a->nickname.c_str(), a->nickname.size());
 
-        PacketManager::SendPacket(a, PKT_MATCH_READY, &pktA, sizeof(pktA));
-        PacketManager::SendPacket(b, PKT_MATCH_READY, &pktB, sizeof(pktB));
+        //PacketManager::SendPacket(a, PKT_MATCH_READY, &pktA, sizeof(pktA));
+        //PacketManager::SendPacket(b, PKT_MATCH_READY, &pktB, sizeof(pktB));
 
         std::cout << "[MATCH] " << a->nickname << " vs " << b->nickname << "\n";
     }

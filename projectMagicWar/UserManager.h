@@ -2,6 +2,7 @@
 #include <string>
 #include <mutex>
 #include <vector>
+#include<unordered_set>
 using namespace std;
 
 struct UserInfo
@@ -21,6 +22,9 @@ public:
 
     // 회원가입
     static bool AddUser(const string& id, const string& hash, const string& salt, const string& nick);
+    static void CreateUserInfo(const std::string& id);
+    static void CreateUserMagic(const std::string& id);
+    static void CreateUserRank(const std::string& id);
 
     // 아이디 존재 확인
     static bool IsIDExist(const string& id);
@@ -34,14 +38,20 @@ public:
     // 로그인
     static bool CheckLogin(const string& id, const string& pw, string& outNick);
 
-    // 프로필 불러오기
-    static bool LoadUserInfo(const string& nick, UserInfo& outInfo);
+    static bool LoadUserAccount(const std::string& id, std::string& outNick);
 
-    // 승/패/경기 기록 업데이트
-    static bool UpdateRecord(const string& nick, const string& resultType);
+    static bool LoadUserInfo(const std::string& id, uint32_t& outLevel, uint32_t& outExp);
+
+    static bool LoadUserRank(const std::string& id, uint32_t& outRank, uint32_t& outRankScore);
+
+    static bool TryLoginUser(const std::string& id);
+    static void LogoutUser(const std::string& id);
 
 private:
     static mutex s_mtx;
     static string s_userFile;
     static string s_infoFile;
+    static std::unordered_set<std::string> s_loggedInUsers;
+    
+
 };

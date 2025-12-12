@@ -11,11 +11,14 @@ enum PacketType
     PKT_LOGIN_OK = 5,
     PKT_LOGIN_ID_FAIL = 6,
     PKT_LOGIN_PW_FAIL = 7,
+    PKT_LOGOUT = 8,
+    PKT_LOGIN_ALREADY = 9,
+    PKT_REQ_PROFILE = 10,
+    PKT_RES_PROFILE = 11,
+    PKT_CHAT_LOBBY = 12,
 
-    PKT_REQ_PROFILE = 8,
-    PKT_RES_PROFILE = 9,
 
-    PKT_REQ_USER_MAGIC = 10,
+    /*PKT_REQ_USER_MAGIC = 10,
     PKT_RES_USER_MAGIC = 11,
 
     PKT_REQ_MAGIC_INFO = 12,
@@ -40,5 +43,6 @@ enum PacketType
     PKT_DAMAGE = 34,
     PKT_DIE = 35,
     PKT_RESULT_WIN = 36,
-    PKT_RESULT_LOSE = 37
+    PKT_RESULT_LOSE = 37,*/
+    
 };

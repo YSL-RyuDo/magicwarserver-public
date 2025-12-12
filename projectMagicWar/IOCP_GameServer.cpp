@@ -1,4 +1,5 @@
 #include "IOCP_GameServer.h"
+#include "PacketManager.h"
 #include <iostream>
 #include <ws2tcpip.h> // InetNtopA 사용 위해 필요
 
@@ -54,6 +55,7 @@ bool IOCP_GameServer::Start()
     for (int i = 0; i < acceptCount; i++)
         PostAccept();
 
+    RankManager::Load("RankTable.csv");
     std::cout << "IOCP Server Started. port = " << port << "\n";
     return true;
 }
@@ -143,13 +145,47 @@ void IOCP_GameServer::WorkerThread()
         ULONG_PTR key = 0;
         LPOVERLAPPED ov = nullptr;
 
-        BOOL ok = GetQueuedCompletionStatus(iocpHandle, &bytes, &key, &ov, INFINITE);
+        BOOL ok = GetQueuedCompletionStatus(
+            iocpHandle,
+            &bytes,
+            &key,
+            &ov,
+            INFINITE
+        );
 
         if (!running) break;
-        if (!ov) continue;
 
-        OverlappedEx* ex = (OverlappedEx*)ov;
+        Session* session = reinterpret_cast<Session*>(key);
 
+        // 1. GQCS 실패 → 무조건 디스커넥트
+        if (!ok)
+        {
+            if (session)
+            {
+                PacketManager::HandleSessionDisconnect(session);
+            }
+            continue;
+        }
+
+        // 2. Overlapped는 없는데 완료가 왔다? → 무시
+        if (!ov)
+            continue;
+
+        OverlappedEx* ex = reinterpret_cast<OverlappedEx*>(ov);
+
+        // 3. recv/send에서 0바이트 → 클라이언트 종료
+        if (bytes == 0 &&
+            (ex->op == OverlappedEx::OP_RECV ||
+                ex->op == OverlappedEx::OP_SEND))
+        {
+            if (session)
+            {
+                PacketManager::HandleSessionDisconnect(session);
+            }
+            continue;
+        }
+
+        // 정상 처리
         switch (ex->op)
         {
         case OverlappedEx::OP_ACCEPT:
@@ -157,15 +193,16 @@ void IOCP_GameServer::WorkerThread()
             break;
 
         case OverlappedEx::OP_RECV:
-            RecvCompletion((Session*)ex->session, ex, bytes);
+            RecvCompletion(session, ex, bytes);
             break;
 
         case OverlappedEx::OP_SEND:
-            SendCompletion((Session*)ex->session, ex);
+            SendCompletion(session, ex);
             break;
         }
     }
 }
+
 
 
 

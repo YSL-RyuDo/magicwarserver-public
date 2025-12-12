@@ -148,9 +148,9 @@
     <ClCompile Include="PacketType.cpp" />
     <ClCompile Include="PasswordHasher.cpp" />
     <ClCompile Include="ProfileManager.cpp" />
+    <ClCompile Include="RankManager.cpp" />
     <ClCompile Include="Session.cpp" />
     <ClCompile Include="SessionPool.cpp" />
-    <ClCompile Include="UserAccountManager.cpp" />
     <ClCompile Include="UserDataManager.cpp" />
     <ClCompile Include="UserManager.cpp" />
     <ClCompile Include="Utils.cpp" />
@@ -173,9 +173,9 @@
     <ClInclude Include="PacketType.h" />
     <ClInclude Include="PasswordHasher.h" />
     <ClInclude Include="ProfileManager.h" />
+    <ClInclude Include="RankManager.h" />
     <ClInclude Include="Session.h" />
     <ClInclude Include="SessionPool.h" />
-    <ClInclude Include="UserAccountManager.h" />
     <ClInclude Include="UserDataManager.h" />
     <ClInclude Include="UserManager.h" />
     <ClInclude Include="Utils.h" />

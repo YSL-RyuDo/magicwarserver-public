@@ -1,18 +1,25 @@
-#include "UserManager.h"
-#include "PasswordHasher.h"   // ★ 추가
-
 #include <fstream>
 #include <sstream>
 #include <iostream>
 
+#include "UserManager.h"
+#include "PasswordHasher.h"
+#include "Utils.h"
+
 using namespace std;
 
 static const char* USER_CSV = "UserAccount.csv";
+static const char* INFO_PATH = "UserInfo.csv";
+static const char* MAGIC_PATH = "UserMagic.csv";
+static const char* RANK_PATH = "UserRank.csv";
 
 mutex UserManager::s_mtx;
 
 string UserManager::s_userFile = USER_CSV;
 string UserManager::s_infoFile = "";
+// UserManager.cpp (전역 영역)
+std::unordered_set<std::string> UserManager::s_loggedInUsers;
+
 
 void UserManager::Init(const string& userFile, const string& infoFile)
 {
@@ -63,6 +70,40 @@ bool UserManager::AddUser(const string& id, const string& hash, const string& sa
     return true;
 }
 
+void UserManager::CreateUserInfo(const std::string& id)
+{
+    std::ofstream file(INFO_PATH, std::ios::app);
+    if (!file.is_open())
+    {
+        std::cout << "[UserInfo] 파일 열기 실패\n";
+        return;
+    }
+    file << id << ",1,0,0,0\n";
+}
+
+void UserManager::CreateUserMagic(const std::string& id)
+{
+    std::ofstream file(MAGIC_PATH, std::ios::app);
+    if (!file.is_open())
+    {
+        std::cout << "[UserMagic] 파일 열기 실패\n";
+        return;
+    }
+    // 기본 스킬 0,1,2,3
+    file << id << ",0,1,2,3\n";
+}
+
+void UserManager::CreateUserRank(const std::string& id)
+{
+    std::ofstream file(RANK_PATH, std::ios::app);
+    if (!file.is_open())
+    {
+        std::cout << "[UserRank] 파일 열기 실패\n";
+        return;
+    }
+    // 기본 MMR=1000, RANK=0(브론즈), RANKSCORE=0
+    file << id << ",1000,0,0\n";
+}
 
 bool UserManager::IsIDExist(const string& id)
 {
@@ -190,3 +231,80 @@ bool UserManager::CheckLogin(const string& id, const string& pw, string& outNick
 
     return false;
 }
+
+bool UserManager::LoadUserAccount(const std::string& id, std::string& outNick)
+{
+    std::ifstream file("UserAccount.csv");
+    std::string line;
+    std::getline(file, line);
+
+    while (std::getline(file, line))
+    {
+        auto c = SplitCSV(line);
+        if (c.size() < 4) continue;
+        if (c[0] == id)
+        {
+            outNick = c[3];
+            return true;
+        }
+    }
+    return false;
+}
+
+bool UserManager::LoadUserInfo(const std::string& id, uint32_t& outLevel, uint32_t& outExp)
+{
+    std::ifstream file("UserInfo.csv");
+    std::string line;
+    std::getline(file, line);
+
+    while (std::getline(file, line))
+    {
+        auto c = SplitCSV(line);
+        if (c.size() < 3) continue;
+        if (c[0] == id)
+        {
+            outLevel = std::stoul(c[1]);
+            outExp = std::stoul(c[2]);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool UserManager::LoadUserRank(const std::string& id, uint32_t& outRank, uint32_t& outRankScore)
+{
+    std::ifstream file("UserRank.csv");
+    std::string line;
+    std::getline(file, line);
+
+    while (std::getline(file, line))
+    {
+        auto c = SplitCSV(line);
+        if (c.size() < 4) continue;
+        if (c[0] == id)
+        {
+            outRank = std::stoul(c[2]);
+            outRankScore = std::stoul(c[3]);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool UserManager::TryLoginUser(const std::string& id)
+{
+    lock_guard<mutex> lock(s_mtx);
+
+    if (s_loggedInUsers.count(id) > 0)
+        return false; // 이미 로그인 중
+
+    s_loggedInUsers.insert(id);
+    return true;
+}
+
+void UserManager::LogoutUser(const std::string& id)
+{
+    lock_guard<mutex> lock(s_mtx);
+    s_loggedInUsers.erase(id);
+}
+

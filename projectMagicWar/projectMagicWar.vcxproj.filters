@@ -24,9 +24,6 @@
     <ClCompile Include="PacketManager.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="UserAccountManager.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
     <ClCompile Include="UserDataManager.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
@@ -90,15 +87,15 @@
     <ClCompile Include="PacketStruct.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="RankManager.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="PacketType.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="PacketManager.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="UserAccountManager.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="UserDataManager.h">
@@ -159,6 +156,9 @@
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="PacketStruct.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="RankManager.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>

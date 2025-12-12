@@ -16,6 +16,7 @@
 #include "SessionPool.h"
 #include "IOCP_Send.h"
 #include "IOCP_Recv.h"
+#include "RankManager.h"
 
 class IOCP_GameServer
 {

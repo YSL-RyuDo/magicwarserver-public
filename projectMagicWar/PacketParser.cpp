@@ -3,8 +3,6 @@
 #include <iostream>
 #include <cstring>
 
-static const int HEADER_SIZE = 4;
-
 void PacketParser::ProcessBuffer(Session* session)
 {
     char* buf = session->recvBuffer;
@@ -12,46 +10,34 @@ void PacketParser::ProcessBuffer(Session* session)
 
     while (true)
     {
-        if (used < 4)
+        // 헤더(8바이트) 미만이면 패킷 불완성
+        if (used < (int)sizeof(PACKET_HEADER))
             return;
 
-        uint16_t pktId, bodySize;
-        memcpy(&pktId, buf, 2);
-        memcpy(&bodySize, buf + 2, 2);
+        PACKET_HEADER header;
+        memcpy(&header, buf, sizeof(PACKET_HEADER));
 
-        int total = 4 + bodySize;
-        if (used < total)
+        int totalSize = sizeof(PACKET_HEADER) + header.bodySize;
+
+        // 전체 패킷이 다 도착했는지 확인
+        if (used < totalSize)
             return;
 
-        PacketManager::HandlePacket(session, pktId, buf + 4, bodySize);
+        // 토큰 검증: 로그인 전(token=0)에는 무시
+        if (session->token != 0 && header.token != session->token)
+        {
+            std::cout << "[보안] 토큰 불일치! session=" << session->sessionId << "\n";
+            return;
+        }
 
-        memmove(buf, buf + total, used - total);
-        used -= total;
+        // 패킷 바디
+        const char* body = buf + sizeof(PACKET_HEADER);
+
+        // 패킷 처리
+        PacketManager::HandlePacket(session, header.packetId, body, header.bodySize);
+
+        // 버퍼에서 패킷 제거
+        memmove(buf, buf + totalSize, used - totalSize);
+        used -= totalSize;
     }
-}
-
-
-bool PacketParser::ExtractPacket(Session* session, int& outPacketId, std::string& outBody)
-{
-    // 최소한 헤더 4바이트는 있어야 packetId 추출 가능
-    if (session->recvUsed < HEADER_SIZE)
-        return false;
-
-    // packetId 추출
-    memcpy(&outPacketId, session->recvBuffer, HEADER_SIZE);
-
-    // body 시작 지점
-    int bodyStart = HEADER_SIZE;
-
-    // body의 길이는 정해져 있지 않고, recvUsed까지 모두 body임
-    int bodyLen = session->recvUsed - HEADER_SIZE;
-    if (bodyLen < 0)
-        return false;
-
-    outBody.assign(session->recvBuffer + bodyStart, bodyLen);
-
-    // 패킷 하나를 소모했으므로 recvBuffer에서 제거(당기기)
-    session->recvUsed = 0;
-
-    return true;
 }
