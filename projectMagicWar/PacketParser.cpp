@@ -10,33 +10,46 @@ void PacketParser::ProcessBuffer(Session* session)
 
     while (true)
     {
-        // 헤더(8바이트) 미만이면 패킷 불완성
+        // 1. 헤더 크기 미만이면 대기
         if (used < (int)sizeof(PACKET_HEADER))
             return;
 
         PACKET_HEADER header;
         memcpy(&header, buf, sizeof(PACKET_HEADER));
 
-        int totalSize = sizeof(PACKET_HEADER) + header.bodySize;
-
-        // 전체 패킷이 다 도착했는지 확인
-        if (used < totalSize)
-            return;
-
-        // 토큰 검증: 로그인 전(token=0)에는 무시
-        if (session->token != 0 && header.token != session->token)
+        // 2. 최소한의 안정성 체크만 수행
+        // 여기서는 절대 closing 하지 않는다
+        if (header.bodySize < 0 ||
+            header.bodySize > IOCP_BUFFER_SIZE)
         {
-            std::cout << "[보안] 토큰 불일치! session=" << session->sessionId << "\n";
+            std::cout
+                << "[PARSER WARN] invalid bodySize "
+                << "session=" << session->sessionId
+                << " bodySize=" << header.bodySize
+                << "\n";
+
+            // 버퍼 초기화 (sync 깨졌다고 가정)
+            used = 0;
             return;
         }
 
-        // 패킷 바디
+        int totalSize = (int)sizeof(PACKET_HEADER) + header.bodySize;
+
+        // 3. 패킷 전체 도착 여부 확인
+        if (used < totalSize)
+            return;
+
+        // 4. 패킷 처리 (보안 판단은 PacketManager에서)
         const char* body = buf + sizeof(PACKET_HEADER);
 
-        // 패킷 처리
-        PacketManager::HandlePacket(session, header.packetId, body, header.bodySize);
+        PacketManager::HandlePacket(
+            session,
+            header.packetId,
+            body,
+            header.bodySize
+        );
 
-        // 버퍼에서 패킷 제거
+        // 5. 처리한 데이터 제거
         memmove(buf, buf + totalSize, used - totalSize);
         used -= totalSize;
     }

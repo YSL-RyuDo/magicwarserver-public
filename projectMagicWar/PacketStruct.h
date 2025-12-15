@@ -43,7 +43,7 @@ struct PKT_SIGNUP_ACK
 // ---------------------------
 // Login Ack
 // ---------------------------
-struct PKT_LOGIN_ACK
+struct PKT_LOGIN_ACK_STRUCT
 {
     uint16_t result;
     uint32_t token;
@@ -74,17 +74,140 @@ struct PKT_CHAT_LOBBY_DATA
     char message[128];
 };
 
-// ---------------------------
-// Match
-// ---------------------------
-struct PKT_MATCH_STATE
+struct PKT_USER_MAGIC_STRUCT
 {
-    char msg[32];
+    uint8_t slots[4];
 };
 
-struct PKT_MATCH_READY_ACK
+
+struct PKT_RES_USER_MAGIC_STRUCT
 {
-    char opponent[32];
+    int32_t slotCount;     // 예: 4
+    int32_t cardIds[4];    // 슬롯 카드 ID
 };
 
+struct PKT_REQ_MAGIC_DETAIL_STRUCT
+{
+    int32_t cardId;
+};
+
+struct PKT_RES_MAGIC_DETAIL_STRUCT
+{
+    int32_t id;
+    int32_t attack;
+    int32_t cooldown;
+    int32_t cost;
+
+    float speed;
+    float radius;
+    float duration;
+    int32_t amount;
+
+    char name[32];
+    char effectType[16];
+};
+
+struct PKT_REQ_REPLACE_MAGIC_STURCT
+{
+    int32_t oldCardId;
+    int32_t newCardId;
+};
+
+struct PKT_RES_REPLACE_USER_MAGIC_STURCT
+{
+    uint8_t result; // 1 = 성공, 0 = 실패
+};
+
+struct PKT_MATCH_RESPONSE_STRUCT
+{
+    uint8_t result;      // 0=WAIT, 1=OK, 2=FAIL
+    uint32_t roomId;
+
+    char userA[32];
+    char userB[32];
+};
+
+struct PKT_MOVE_STRUCT
+{
+    char userId[32];
+    float x;
+    float y;
+};
+
+struct PKT_RES_HP_STRUCT
+{
+    int32_t currentHp;
+    int32_t maxHp;
+};
+
+struct PKT_HIT_STRUCT
+{
+    char attackerId[32];
+    char targetId[32];
+    int32_t cardId;
+    int32_t damage;
+};
+
+struct PKT_CAST_MAGIC_STRUCT
+{
+    int cardId;
+    float dirX;
+    float dirY;
+};
+
+
+struct PKT_SPAWN_MAGIC_STRUCT
+{
+    char  casterId[32];     // 시전자 ID
+    int   cardId;
+
+    float dirX;             // 발사 방향 X
+    float dirY;             // 발사 방향 Y
+
+    int   attack;           // 서버 권위 공격력
+    float projectileSpeed;  // 서버 권위 속도
+};
+
+struct PKT_REQ_MAGIC_DETAIL_STRUCT_GAME
+{
+    int cardId;
+};
+
+struct PKT_RES_MAGIC_DETAIL_STRUCT_GAME
+{
+    int cardId;
+
+    int attack;
+    float speed;
+    float cooldown;
+
+    float radius;
+    float duration;
+    int amount;
+};
+
+struct PKT_DIE_STRUCT
+{
+    char deadUserId[32];
+};
+
+struct PKT_RESULT_STRUCT
+{
+    char userId[32];
+};
+
+
+//효과
+struct PKT_STATUS_SLOW_STRUCT
+{
+    char targetId[32];
+    float slowRatio;     // 예: 0.5f = 이동속도 50%
+    int durationMs;      // 지속 시간 (ms)
+};
+
+struct PKT_STATUS_STUN_STRUCT
+{
+    char targetId[32];
+    int durationMs;      // 지속 시간 (ms)
+};
 #pragma pack(pop)

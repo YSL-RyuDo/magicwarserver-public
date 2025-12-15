@@ -24,9 +24,6 @@
     <ClCompile Include="PacketManager.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="UserDataManager.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
     <ClCompile Include="MatchManager.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
@@ -45,22 +42,10 @@
     <ClCompile Include="IOCP_Send.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="ProfileManager.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
     <ClCompile Include="OverlappedEx.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="IOCP_Recv.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="UserManager.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="MagicManager.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="CooldownManager.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="IOCP_Defines.cpp">
@@ -87,7 +72,10 @@
     <ClCompile Include="PacketStruct.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="RankManager.cpp">
+    <ClCompile Include="UserManager.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="DBManager.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>
@@ -96,9 +84,6 @@
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="PacketManager.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="UserDataManager.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="MatchManager.h">
@@ -119,9 +104,6 @@
     <ClInclude Include="IOCP_Send.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="ProfileManager.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
     <ClInclude Include="OverlappedEx.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
@@ -129,12 +111,6 @@
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="UserManager.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="MagicManager.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="CooldownManager.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="IOCP_Defines.h">
@@ -158,7 +134,7 @@
     <ClInclude Include="PacketStruct.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="RankManager.h">
+    <ClInclude Include="DBManager.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>

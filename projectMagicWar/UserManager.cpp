@@ -1,310 +1,342 @@
-#include <fstream>
-#include <sstream>
+癤�#include "UserManager.h"
+#include "DBManager.h"
+#include "PasswordHasher.h"
+#include <mysql/mysql.h>
 #include <iostream>
 
-#include "UserManager.h"
-#include "PasswordHasher.h"
-#include "Utils.h"
+// =========================
+// static members
+// =========================
+std::mutex UserManager::s_mtx;
+std::unordered_set<std::string> UserManager::s_loggedIn;
+std::unordered_map<int, CardInfo> UserManager::s_cards;
+std::unordered_map<int, RankInfo> UserManager::s_ranks;
 
-using namespace std;
-
-static const char* USER_CSV = "UserAccount.csv";
-static const char* INFO_PATH = "UserInfo.csv";
-static const char* MAGIC_PATH = "UserMagic.csv";
-static const char* RANK_PATH = "UserRank.csv";
-
-mutex UserManager::s_mtx;
-
-string UserManager::s_userFile = USER_CSV;
-string UserManager::s_infoFile = "";
-// UserManager.cpp (전역 영역)
-std::unordered_set<std::string> UserManager::s_loggedInUsers;
-
-
-void UserManager::Init(const string& userFile, const string& infoFile)
+// =================================================
+// Account
+// =================================================
+bool UserManager::AddUser(
+    const std::string& id,
+    const std::string& hash,
+    const std::string& salt,
+    const std::string& nick)
 {
-    lock_guard<mutex> lock(s_mtx);
-    s_userFile = userFile;
-    s_infoFile = infoFile;
+    std::lock_guard<std::mutex> lock(DBManager::GetMutex());
+    MYSQL* db = DBManager::Get();
+
+    if (IsIDExist(id) || IsNickExist(nick))
+        return false;
+
+    mysql_query(db, "START TRANSACTION");
+
+    auto rollback = [&]() {
+        mysql_query(db, "ROLLBACK");
+        return false;
+        };
+
+    if (mysql_query(db,
+        ("INSERT INTO user_account(id,hash,salt,nickname) VALUES('"
+            + id + "','" + hash + "','" + salt + "','" + nick + "')").c_str()) != 0)
+        return rollback();
+
+    if (mysql_query(db,
+        ("INSERT INTO user_info(user_id) VALUES('" + id + "')").c_str()) != 0)
+        return rollback();
+
+    if (mysql_query(db,
+        ("INSERT INTO user_rank(user_id) VALUES('" + id + "')").c_str()) != 0)
+        return rollback();
+
+    if (mysql_query(db,
+        ("INSERT INTO user_magic(user_id,magic0,magic1,magic2,magic3)"
+            " VALUES('" + id + "',0,1,2,3)").c_str()) != 0)
+        return rollback();
+
+    if (mysql_query(db, "COMMIT") != 0)
+        return rollback();
+
+    return ValidateUser(id);
 }
 
-/*
-    CSV 구조 변경됨:
-    ID,Hash,Salt,Nick
-*/
-
-bool UserManager::AddUser(const string& id, const string& hash, const string& salt, const string& nick)
+bool UserManager::CheckLogin(
+    const std::string& id,
+    const std::string& pw,
+    std::string& outNick)
 {
-    lock_guard<mutex> lock(s_mtx);
+    std::lock_guard<std::mutex> lock(DBManager::GetMutex());
+    MYSQL* db = DBManager::Get();
 
-    ifstream fin(s_userFile);
-    if (fin.is_open())
+    if (mysql_query(db,
+        ("SELECT hash,salt,nickname FROM user_account WHERE id='" + id + "'").c_str()) != 0)
+        return false;
+
+    MYSQL_RES* res = mysql_store_result(db);
+    if (!res) return false;
+
+    MYSQL_ROW row = mysql_fetch_row(res);
+    if (!row)
     {
-        string line;
-        getline(fin, line);
-
-        while (getline(fin, line))
-        {
-            stringstream ss(line);
-            string cid, chash, csalt, cnick;
-
-            getline(ss, cid, ',');
-            getline(ss, chash, ',');
-            getline(ss, csalt, ',');
-            getline(ss, cnick, ',');
-
-            if (cid == id)
-                return false; // ID 중복
-        }
-        fin.close();
-    }
-
-    ofstream fout(s_userFile, ios::app);
-    if (!fout.is_open())
-    {
-        cout << "[UserManager] CSV 쓰기 실패: " << s_userFile << endl;
+        mysql_free_result(res);
         return false;
     }
 
-    fout << id << "," << hash << "," << salt << "," << nick << "\n";
-    return true;
+    std::string hash = row[0];
+    std::string salt = row[1];
+    outNick = row[2];
+
+    mysql_free_result(res);
+    return PasswordHasher::Hash(pw, salt) == hash;
 }
 
-void UserManager::CreateUserInfo(const std::string& id)
+bool UserManager::IsIDExist(const std::string& id)
 {
-    std::ofstream file(INFO_PATH, std::ios::app);
-    if (!file.is_open())
-    {
-        std::cout << "[UserInfo] 파일 열기 실패\n";
-        return;
-    }
-    file << id << ",1,0,0,0\n";
+    MYSQL* db = DBManager::Get();
+    if (mysql_query(db,
+        ("SELECT 1 FROM user_account WHERE id='" + id + "' LIMIT 1").c_str()) != 0)
+        return false;
+
+    MYSQL_RES* res = mysql_store_result(db);
+    bool exist = (res && mysql_num_rows(res) > 0);
+    if (res) mysql_free_result(res);
+    return exist;
 }
 
-void UserManager::CreateUserMagic(const std::string& id)
+bool UserManager::IsNickExist(const std::string& nick)
 {
-    std::ofstream file(MAGIC_PATH, std::ios::app);
-    if (!file.is_open())
-    {
-        std::cout << "[UserMagic] 파일 열기 실패\n";
-        return;
-    }
-    // 기본 스킬 0,1,2,3
-    file << id << ",0,1,2,3\n";
+    MYSQL* db = DBManager::Get();
+    if (mysql_query(db,
+        ("SELECT 1 FROM user_account WHERE nickname='" + nick + "' LIMIT 1").c_str()) != 0)
+        return false;
+
+    MYSQL_RES* res = mysql_store_result(db);
+    bool exist = (res && mysql_num_rows(res) > 0);
+    if (res) mysql_free_result(res);
+    return exist;
 }
 
-void UserManager::CreateUserRank(const std::string& id)
-{
-    std::ofstream file(RANK_PATH, std::ios::app);
-    if (!file.is_open())
-    {
-        std::cout << "[UserRank] 파일 열기 실패\n";
-        return;
-    }
-    // 기본 MMR=1000, RANK=0(브론즈), RANKSCORE=0
-    file << id << ",1000,0,0\n";
-}
-
-bool UserManager::IsIDExist(const string& id)
-{
-    lock_guard<mutex> lock(s_mtx);
-
-    ifstream fin(s_userFile);
-    if (!fin.is_open()) return false;
-
-    string line;
-    getline(fin, line);
-
-    while (getline(fin, line))
-    {
-        stringstream ss(line);
-        string cid, chash, csalt, cnick;
-
-        getline(ss, cid, ',');
-        getline(ss, chash, ',');
-        getline(ss, csalt, ',');
-        getline(ss, cnick, ',');
-
-        if (cid == id)
-            return true;
-    }
-    return false;
-}
-
-bool UserManager::IsNickExist(const string& nick)
-{
-    lock_guard<mutex> lock(s_mtx);
-
-    ifstream fin(s_userFile);
-    if (!fin.is_open()) return false;
-
-    string line;
-    getline(fin, line); // 헤더 스킵
-
-    while (getline(fin, line))
-    {
-        stringstream ss(line);
-        string cid, chash, csalt, cnick;
-
-        getline(ss, cid, ',');
-        getline(ss, chash, ',');
-        getline(ss, csalt, ',');
-        getline(ss, cnick, ',');
-
-        if (cnick == nick)
-            return true;
-    }
-    return false;
-}
-
-bool UserManager::LoadUser(const string& id, string& outHash, string& outSalt, string& outNick)
-{
-    lock_guard<mutex> lock(s_mtx);
-
-    ifstream fin(s_userFile);
-    if (!fin.is_open()) return false;
-
-    string line;
-    getline(fin, line); // header skip
-
-    while (getline(fin, line))
-    {
-        stringstream ss(line);
-        string cid, chash, csalt, cnick;
-
-        getline(ss, cid, ',');
-        getline(ss, chash, ',');
-        getline(ss, csalt, ',');
-        getline(ss, cnick, ',');
-
-        if (cid != id) continue;
-
-        outHash = chash;
-        outSalt = csalt;
-        outNick = cnick;
-        return true;
-    }
-
-    return false;
-}
-
-
-/*
-    로그인 검증:
-    1) CSV에서 ID 검색
-    2) 저장된 Hash, Salt 가져옴
-    3) 입력된 password + salt → 해시 계산
-    4) 저장된 hash와 비교
-*/
-bool UserManager::CheckLogin(const string& id, const string& pw, string& outNick)
-{
-    lock_guard<mutex> lock(s_mtx);
-
-    ifstream fin(s_userFile);
-    if (!fin.is_open()) return false;
-
-    string line;
-    getline(fin, line);
-
-    while (getline(fin, line))
-    {
-        stringstream ss(line);
-        string cid, chash, csalt, cnick;
-
-        getline(ss, cid, ',');
-        getline(ss, chash, ',');
-        getline(ss, csalt, ',');
-        getline(ss, cnick, ',');
-
-        if (cid != id) continue;
-
-        // 1) 입력 PW 해시화
-        string computed = PasswordHasher::Hash(pw, csalt);
-
-        // 2) 비교
-        if (computed != chash)
-            return false;
-
-        outNick = cnick;
-        return true;
-    }
-
-    return false;
-}
-
-bool UserManager::LoadUserAccount(const std::string& id, std::string& outNick)
-{
-    std::ifstream file("UserAccount.csv");
-    std::string line;
-    std::getline(file, line);
-
-    while (std::getline(file, line))
-    {
-        auto c = SplitCSV(line);
-        if (c.size() < 4) continue;
-        if (c[0] == id)
-        {
-            outNick = c[3];
-            return true;
-        }
-    }
-    return false;
-}
-
-bool UserManager::LoadUserInfo(const std::string& id, uint32_t& outLevel, uint32_t& outExp)
-{
-    std::ifstream file("UserInfo.csv");
-    std::string line;
-    std::getline(file, line);
-
-    while (std::getline(file, line))
-    {
-        auto c = SplitCSV(line);
-        if (c.size() < 3) continue;
-        if (c[0] == id)
-        {
-            outLevel = std::stoul(c[1]);
-            outExp = std::stoul(c[2]);
-            return true;
-        }
-    }
-    return false;
-}
-
-bool UserManager::LoadUserRank(const std::string& id, uint32_t& outRank, uint32_t& outRankScore)
-{
-    std::ifstream file("UserRank.csv");
-    std::string line;
-    std::getline(file, line);
-
-    while (std::getline(file, line))
-    {
-        auto c = SplitCSV(line);
-        if (c.size() < 4) continue;
-        if (c[0] == id)
-        {
-            outRank = std::stoul(c[2]);
-            outRankScore = std::stoul(c[3]);
-            return true;
-        }
-    }
-    return false;
-}
-
+// =================================================
+// Login state
+// =================================================
 bool UserManager::TryLoginUser(const std::string& id)
 {
-    lock_guard<mutex> lock(s_mtx);
-
-    if (s_loggedInUsers.count(id) > 0)
-        return false; // 이미 로그인 중
-
-    s_loggedInUsers.insert(id);
+    std::lock_guard<std::mutex> lock(s_mtx);
+    if (s_loggedIn.count(id)) return false;
+    s_loggedIn.insert(id);
     return true;
 }
 
 void UserManager::LogoutUser(const std::string& id)
 {
-    lock_guard<mutex> lock(s_mtx);
-    s_loggedInUsers.erase(id);
+    std::lock_guard<std::mutex> lock(s_mtx);
+    s_loggedIn.erase(id);
 }
 
+// =================================================
+// Load / Save
+// =================================================
+bool UserManager::LoadUserInfo(const std::string& id, UserInfoData& out)
+{
+    MYSQL* db = DBManager::Get();
+    if (mysql_query(db,
+        ("SELECT level,exp,win,lose FROM user_info WHERE user_id='" + id + "'").c_str()) != 0)
+        return false;
+
+    MYSQL_RES* res = mysql_store_result(db);
+    if (!res) return false;
+
+    MYSQL_ROW row = mysql_fetch_row(res);
+    if (!row)
+    {
+        mysql_free_result(res);
+        return false;
+    }
+
+    out.level = atoi(row[0]);
+    out.exp = atoi(row[1]);
+    out.win = atoi(row[2]);
+    out.lose = atoi(row[3]);
+
+    mysql_free_result(res);
+    return true;
+}
+
+bool UserManager::SaveUserInfo(const std::string& id, const UserInfoData& d)
+{
+    MYSQL* db = DBManager::Get();
+    return mysql_query(db,
+        ("UPDATE user_info SET "
+            "level=" + std::to_string(d.level) +
+            ",exp=" + std::to_string(d.exp) +
+            ",win=" + std::to_string(d.win) +
+            ",lose=" + std::to_string(d.lose) +
+            " WHERE user_id='" + id + "'").c_str()) == 0;
+}
+
+bool UserManager::LoadUserRank(const std::string& id, UserRankData& out)
+{
+    MYSQL* db = DBManager::Get();
+    if (mysql_query(db,
+        ("SELECT mmr,rank,rank_score FROM user_rank WHERE user_id='" + id + "'").c_str()) != 0)
+        return false;
+
+    MYSQL_RES* res = mysql_store_result(db);
+    if (!res) return false;
+
+    MYSQL_ROW row = mysql_fetch_row(res);
+    if (!row)
+    {
+        mysql_free_result(res);
+        return false;
+    }
+
+    out.mmr = atoi(row[0]);
+    out.rank = atoi(row[1]);
+    out.rankScore = atoi(row[2]);
+
+    mysql_free_result(res);
+    return true;
+}
+
+bool UserManager::SaveUserRank(const std::string& id, const UserRankData& d)
+{
+    MYSQL* db = DBManager::Get();
+    return mysql_query(db,
+        ("UPDATE user_rank SET "
+            "mmr=" + std::to_string(d.mmr) +
+            ",rank=" + std::to_string(d.rank) +
+            ",rank_score=" + std::to_string(d.rankScore) +
+            " WHERE user_id='" + id + "'").c_str()) == 0;
+}
+
+bool UserManager::LoadUserMagic(const std::string& id, std::vector<int>& out)
+{
+    MYSQL* db = DBManager::Get();
+    if (mysql_query(db,
+        ("SELECT magic0,magic1,magic2,magic3 FROM user_magic WHERE user_id='" + id + "'").c_str()) != 0)
+        return false;
+
+    MYSQL_RES* res = mysql_store_result(db);
+    if (!res) return false;
+
+    MYSQL_ROW row = mysql_fetch_row(res);
+    if (!row)
+    {
+        mysql_free_result(res);
+        return false;
+    }
+
+    out = {
+        atoi(row[0]),
+        atoi(row[1]),
+        atoi(row[2]),
+        atoi(row[3])
+    };
+
+    mysql_free_result(res);
+    return true;
+}
+
+bool UserManager::ReplaceUserMagic(
+    const std::string& id, int oldCard, int newCard)
+{
+    MYSQL* db = DBManager::Get();
+    return mysql_query(db,
+        ("UPDATE user_magic SET "
+            "magic0=IF(magic0=" + std::to_string(oldCard) + "," + std::to_string(newCard) + ",magic0),"
+            "magic1=IF(magic1=" + std::to_string(oldCard) + "," + std::to_string(newCard) + ",magic1),"
+            "magic2=IF(magic2=" + std::to_string(oldCard) + "," + std::to_string(newCard) + ",magic2),"
+            "magic3=IF(magic3=" + std::to_string(oldCard) + "," + std::to_string(newCard) + ",magic3)"
+            " WHERE user_id='" + id + "'").c_str()) == 0;
+}
+
+bool UserManager::LoadUserProfile(const std::string& id, UserProfileData& out)
+{
+    return LoadUserInfo(id, out.info) && LoadUserRank(id, out.rank);
+}
+
+// =================================================
+// Static tables
+// =================================================
+bool UserManager::LoadCardTable()
+{
+    MYSQL* db = DBManager::Get();
+    if (mysql_query(db,
+        "SELECT id,name,attack,cooldown,cost,effect_type,speed,radius,duration,amount FROM card_table") != 0)
+        return false;
+
+    MYSQL_RES* res = mysql_store_result(db);
+    if (!res) return false;
+
+    s_cards.clear();
+    MYSQL_ROW row;
+    while ((row = mysql_fetch_row(res)))
+    {
+        CardInfo c{};
+        c.id = atoi(row[0]);
+        c.name = row[1];
+        c.attack = atoi(row[2]);
+        c.cooldown = atoi(row[3]);
+        c.cost = atoi(row[4]);
+        c.effectType = row[5];
+        c.speed = (float)atof(row[6]);
+        c.radius = (float)atof(row[7]);
+        c.duration = (float)atof(row[8]);
+        c.amount = atoi(row[9]);
+        s_cards[c.id] = c;
+    }
+
+    mysql_free_result(res);
+    return true;
+}
+
+bool UserManager::LoadRankTable()
+{
+    MYSQL* db = DBManager::Get();
+    if (mysql_query(db,
+        "SELECT rank,name,min_score,max_score FROM rank_table") != 0)
+        return false;
+
+    MYSQL_RES* res = mysql_store_result(db);
+    if (!res) return false;
+
+    s_ranks.clear();
+    MYSQL_ROW row;
+    while ((row = mysql_fetch_row(res)))
+    {
+        RankInfo r{};
+        r.rank = atoi(row[0]);
+        r.name = row[1];
+        r.minScore = atoi(row[2]);
+        r.maxScore = atoi(row[3]);
+        s_ranks[r.rank] = r;
+    }
+
+    mysql_free_result(res);
+    return true;
+}
+
+const CardInfo* UserManager::GetCardInfo(int id)
+{
+    auto it = s_cards.find(id);
+    return it == s_cards.end() ? nullptr : &it->second;
+}
+
+const RankInfo* UserManager::GetRankInfo(int rank)
+{
+    auto it = s_ranks.find(rank);
+    return it == s_ranks.end() ? nullptr : &it->second;
+}
+
+// =================================================
+// Validation
+// =================================================
+bool UserManager::ValidateUser(const std::string& id)
+{
+    UserInfoData info{};
+    UserRankData rank{};
+    std::vector<int> magic;
+
+    return LoadUserInfo(id, info)
+        && LoadUserRank(id, rank)
+        && LoadUserMagic(id, magic);
+}

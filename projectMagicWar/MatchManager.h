@@ -3,7 +3,7 @@
 #include <mutex>
 #include <unordered_map>
 #include "Session.h"
-
+#include "UserManager.h"
 class MatchManager
 {
 public:
@@ -11,10 +11,15 @@ public:
 
     void RequestMatch(Session* session);
     void CancelMatch(Session* session);
+    static void ProcessResult(Session* winner, Session* loser);
 
 private:
     void TryMatch();
-
+    void StartBattle(Session* a, Session* b);
+    static int CalculateBaseDelta(int rankDiff);
+    static int CalculateRankFromScore(int rankScore);
+    static int GetAllowedMMRRange(int waitSeconds);
+    bool IsRankCompatible(int rankA, int rankB, int waitSeconds);
     std::queue<Session*> matchQueue;
     std::mutex queueMtx;
 };

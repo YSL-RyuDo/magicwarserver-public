@@ -24,7 +24,7 @@ public:
         sessionId = 0;
 
         recvUsed = 0;
-
+        ZeroMemory(recvBuffer, IOCP_BUFFER_SIZE);
         while (!sendQueue.empty())
             sendQueue.pop();
 
@@ -43,6 +43,11 @@ public:
 public:
     SOCKET sock;
     uint64_t sessionId;
+    uint32_t roomId = 0;
+    int currentHp = 100;
+    int maxHp = 100;
+    float posX = 0.f;
+    float posY = 0.f;
 
     char recvBuffer[IOCP_BUFFER_SIZE];
     int recvUsed;
@@ -62,4 +67,17 @@ public:
     Session* battleOpponent;
 
     uint32_t token = 0;
+
+    int mmr;
+    int rank;
+    int rankScore;
+    std::chrono::steady_clock::time_point queueEnterTime;
+
+    bool isSlowed = false;
+    bool isStunned = false;
+
+    float slowRatio = 1.0f;
+
+    uint64_t slowEndTime = 0;
+    uint64_t stunEndTime = 0;
 };

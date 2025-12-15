@@ -1,5 +1,6 @@
 #include "IOCP_GameServer.h"
 #include "PacketManager.h"
+#include "DBManager.h"
 #include <iostream>
 #include <ws2tcpip.h> // InetNtopA 사용 위해 필요
 
@@ -55,7 +56,19 @@ bool IOCP_GameServer::Start()
     for (int i = 0; i < acceptCount; i++)
         PostAccept();
 
-    RankManager::Load("RankTable.csv");
+    if (!DBManager::Init("127.0.0.1", "SET_DB_USER", "SET_DB_PASSWORD", "SET_DB_NAME",
+        3307
+    ))
+    {
+        std::cout << "[DB] DBManager Init 실패\n";
+        return false;
+    }
+
+    std::cout << "[DB] DBManager Init 성공\n";
+
+    UserManager::LoadRankTable();
+    UserManager::LoadCardTable();
+
     std::cout << "IOCP Server Started. port = " << port << "\n";
     return true;
 }
@@ -178,12 +191,31 @@ void IOCP_GameServer::WorkerThread()
             (ex->op == OverlappedEx::OP_RECV ||
                 ex->op == OverlappedEx::OP_SEND))
         {
+            std::cout
+                << "[DISCONNECT] bytes == 0 발생\n"
+                << "  session 포인터 = " << session << "\n"
+                << "  sessionId = " << (session ? session->sessionId : -1) << "\n"
+                << "  op = "
+                << (ex->op == OverlappedEx::OP_RECV ? "RECV" :
+                    ex->op == OverlappedEx::OP_SEND ? "SEND" : "UNKNOWN")
+                << "\n"
+                << "  closing = "
+                << (session ? session->closing.load() : -1) << "\n"
+                << "  authenticated = "
+                << (session ? session->authenticated : -1) << "\n"
+                << "  recvUsed = "
+                << (session ? session->recvUsed : -1) << "\n"
+                << "  socket = "
+                << (session ? session->sock : INVALID_SOCKET) << "\n";
+
             if (session)
             {
+                std::cout << "[DISCONNECT] HandleSessionDisconnect 호출\n";
                 PacketManager::HandleSessionDisconnect(session);
             }
             continue;
         }
+
 
         // 정상 처리
         switch (ex->op)
@@ -239,6 +271,8 @@ void IOCP_GameServer::AcceptCompletion(OverlappedEx* ov)
     // -------------------------------
 
     Session* session = sessionPool.Acquire();
+
+	
     session->sock = ov->acceptSock;
     session->sessionId = sessionIdGen++;
 
@@ -281,3 +315,4 @@ void IOCP_GameServer::CloseSession(Session* session)
 
     sessionPool.Release(session);
 }
+

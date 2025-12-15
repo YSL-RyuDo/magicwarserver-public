@@ -77,10 +77,13 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>C:\Bitnami\wampstack-8.1.2-0\mariadb\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>C:\Bitnami\wampstack-8.1.2-0\mariadb\lib</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libmariadb.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -92,12 +95,15 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>C:\Bitnami\wampstack-8.1.2-0\mariadb\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>libmariadb.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\Bitnami\wampstack-8.1.2-0\mariadb\lib</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -106,10 +112,13 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>C:\Bitnami\wampstack-8.1.2-0\mariadb\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>libmariadb.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\Bitnami\wampstack-8.1.2-0\mariadb\lib</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -120,24 +129,26 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>C:\Bitnami\wampstack-8.1.2-0\mariadb\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>libmariadb.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\Bitnami\wampstack-8.1.2-0\mariadb\lib</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\Util\SHA256.cpp" />
     <ClCompile Include="BufferBlock.cpp" />
     <ClCompile Include="BufferPool.cpp" />
-    <ClCompile Include="CooldownManager.cpp" />
+    <ClCompile Include="DBManager.cpp" />
     <ClCompile Include="IOCP_Defines.cpp" />
     <ClCompile Include="IOCP_GameServer.cpp" />
     <ClCompile Include="IOCP_Recv.cpp" />
     <ClCompile Include="IOCP_Send.cpp" />
-    <ClCompile Include="MagicManager.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MatchManager.cpp" />
     <ClCompile Include="OverlappedEx.cpp" />
@@ -147,23 +158,19 @@
     <ClCompile Include="PacketStruct.cpp" />
     <ClCompile Include="PacketType.cpp" />
     <ClCompile Include="PasswordHasher.cpp" />
-    <ClCompile Include="ProfileManager.cpp" />
-    <ClCompile Include="RankManager.cpp" />
     <ClCompile Include="Session.cpp" />
     <ClCompile Include="SessionPool.cpp" />
-    <ClCompile Include="UserDataManager.cpp" />
     <ClCompile Include="UserManager.cpp" />
     <ClCompile Include="Utils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Util\SHA256.h" />
     <ClInclude Include="BufferPool.h" />
-    <ClInclude Include="CooldownManager.h" />
+    <ClInclude Include="DBManager.h" />
     <ClInclude Include="IOCP_Defines.h" />
     <ClInclude Include="IOCP_GameServer.h" />
     <ClInclude Include="IOCP_Recv.h" />
     <ClInclude Include="IOCP_Send.h" />
-    <ClInclude Include="MagicManager.h" />
     <ClInclude Include="MatchManager.h" />
     <ClInclude Include="OverlappedEx.h" />
     <ClInclude Include="OverlappedPool.h" />
@@ -172,11 +179,8 @@
     <ClInclude Include="PacketStruct.h" />
     <ClInclude Include="PacketType.h" />
     <ClInclude Include="PasswordHasher.h" />
-    <ClInclude Include="ProfileManager.h" />
-    <ClInclude Include="RankManager.h" />
     <ClInclude Include="Session.h" />
     <ClInclude Include="SessionPool.h" />
-    <ClInclude Include="UserDataManager.h" />
     <ClInclude Include="UserManager.h" />
     <ClInclude Include="Utils.h" />
   </ItemGroup>

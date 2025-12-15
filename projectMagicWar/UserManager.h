@@ -1,57 +1,100 @@
 #pragma once
 #include <string>
-#include <mutex>
 #include <vector>
-#include<unordered_set>
-using namespace std;
+#include <unordered_map>
+#include <unordered_set>
+#include <mutex>
 
-struct UserInfo
+struct CardInfo
 {
-    string nickname;
-    int win;
-    int draw;
-    int lose;
-    int exp;
+    int id;
+    std::string name;
+    int attack;
+    int cooldown;
+    int cost;
+    std::string effectType;
+    float speed;
+    float radius;
+    float duration;
+    int amount;
+};
+
+struct RankInfo
+{
+    int rank;
+    std::string name;
+    int minScore;
+    int maxScore;
+};
+
+struct UserInfoData
+{
     int level;
+    int exp;
+    int win;
+    int lose;
+};
+
+struct UserRankData
+{
+    int mmr;
+    int rank;
+    int rankScore;
+};
+
+struct UserProfileData
+{
+    UserInfoData info;
+    UserRankData rank;
 };
 
 class UserManager
 {
 public:
-    static void Init(const string& userFile, const string& infoFile);
+    // ===== Account =====
+    static bool AddUser(
+        const std::string& id,
+        const std::string& hash,
+        const std::string& salt,
+        const std::string& nick);
 
-    // 회원가입
-    static bool AddUser(const string& id, const string& hash, const string& salt, const string& nick);
-    static void CreateUserInfo(const std::string& id);
-    static void CreateUserMagic(const std::string& id);
-    static void CreateUserRank(const std::string& id);
+    static bool CheckLogin(
+        const std::string& id,
+        const std::string& pw,
+        std::string& outNick);
 
-    // 아이디 존재 확인
-    static bool IsIDExist(const string& id);
+    static bool IsIDExist(const std::string& id);
+    static bool IsNickExist(const std::string& nick);
 
-    // 닉네임 존재 여부
-    static bool IsNickExist(const string& nick);
-
-    // 로그인용 전체 데이터 로드
-    static bool LoadUser(const string& id, string& outHash, string& outSalt, string& outNick);
-
-    // 로그인
-    static bool CheckLogin(const string& id, const string& pw, string& outNick);
-
-    static bool LoadUserAccount(const std::string& id, std::string& outNick);
-
-    static bool LoadUserInfo(const std::string& id, uint32_t& outLevel, uint32_t& outExp);
-
-    static bool LoadUserRank(const std::string& id, uint32_t& outRank, uint32_t& outRankScore);
-
+    // ===== Login state =====
     static bool TryLoginUser(const std::string& id);
     static void LogoutUser(const std::string& id);
 
-private:
-    static mutex s_mtx;
-    static string s_userFile;
-    static string s_infoFile;
-    static std::unordered_set<std::string> s_loggedInUsers;
-    
+    // ===== Load / Save =====
+    static bool LoadUserInfo(const std::string& id, UserInfoData& out);
+    static bool SaveUserInfo(const std::string& id, const UserInfoData& data);
 
+    static bool LoadUserRank(const std::string& id, UserRankData& out);
+    static bool SaveUserRank(const std::string& id, const UserRankData& data);
+
+    static bool LoadUserMagic(const std::string& id, std::vector<int>& out);
+    static bool ReplaceUserMagic(const std::string& id, int oldCard, int newCard);
+
+    static bool LoadUserProfile(const std::string& id, UserProfileData& out);
+
+    // ===== Static tables =====
+    static bool LoadCardTable();
+    static bool LoadRankTable();
+
+    static const CardInfo* GetCardInfo(int id);
+    static const RankInfo* GetRankInfo(int rank);
+
+    // ===== Validation =====
+    static bool ValidateUser(const std::string& id);
+
+private:
+    static std::mutex s_mtx;
+    static std::unordered_set<std::string> s_loggedIn;
+    static std::unordered_map<int, CardInfo> s_cards;
+    static std::unordered_map<int, RankInfo> s_ranks;
 };
