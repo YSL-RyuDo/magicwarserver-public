@@ -11,7 +11,9 @@ public:
 
     void RequestMatch(Session* session);
     void CancelMatch(Session* session);
-    static void ProcessResult(Session* winner, Session* loser);
+    static void ProcessResultById(
+        const std::string& winnerId,
+        const std::string& loserId);
 
 private:
     void TryMatch();

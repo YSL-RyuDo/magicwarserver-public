@@ -12,15 +12,24 @@ void PacketParser::ProcessBuffer(Session* session)
     {
         // 1. 헤더 크기 미만이면 대기
         if (used < (int)sizeof(PACKET_HEADER))
+        {
+            std::cout << "[PARSER] 헤더 대기 중 used=" << used << "\n";
             return;
+        }
+
 
         PACKET_HEADER header;
         memcpy(&header, buf, sizeof(PACKET_HEADER));
 
+        std::cout
+            << "[PARSER] packetId=" << header.packetId
+            << " token=" << header.token
+            << " bodySize=" << header.bodySize
+            << " recvUsed=" << used
+            << "\n";
         // 2. 최소한의 안정성 체크만 수행
         // 여기서는 절대 closing 하지 않는다
-        if (header.bodySize < 0 ||
-            header.bodySize > IOCP_BUFFER_SIZE)
+        if (header.bodySize > IOCP_BUFFER_SIZE)
         {
             std::cout
                 << "[PARSER WARN] invalid bodySize "
@@ -45,6 +54,7 @@ void PacketParser::ProcessBuffer(Session* session)
         PacketManager::HandlePacket(
             session,
             header.packetId,
+            header.token,
             body,
             header.bodySize
         );

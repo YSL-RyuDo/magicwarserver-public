@@ -51,7 +51,7 @@ struct UserProfileData
 class UserManager
 {
 public:
-    // ===== Account =====
+    // 계정
     static bool AddUser(
         const std::string& id,
         const std::string& hash,
@@ -66,11 +66,11 @@ public:
     static bool IsIDExist(const std::string& id);
     static bool IsNickExist(const std::string& nick);
 
-    // ===== Login state =====
+    // 로그인 상태
     static bool TryLoginUser(const std::string& id);
     static void LogoutUser(const std::string& id);
 
-    // ===== Load / Save =====
+    // 저장 및 불러오기
     static bool LoadUserInfo(const std::string& id, UserInfoData& out);
     static bool SaveUserInfo(const std::string& id, const UserInfoData& data);
 
@@ -82,14 +82,14 @@ public:
 
     static bool LoadUserProfile(const std::string& id, UserProfileData& out);
 
-    // ===== Static tables =====
+	// 카드 및 랭크 테이블
     static bool LoadCardTable();
     static bool LoadRankTable();
 
     static const CardInfo* GetCardInfo(int id);
     static const RankInfo* GetRankInfo(int rank);
 
-    // ===== Validation =====
+	//  유저  검증
     static bool ValidateUser(const std::string& id);
 
 private:

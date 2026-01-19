@@ -1,5 +1,6 @@
 #include "MatchManager.h"
 #include "PacketManager.h"
+#include "DBWorkerInstance.h"
 #include <algorithm>
 #include <iostream>
 #include <cstring>
@@ -8,9 +9,7 @@ MatchManager::MatchManager()
 {
 }
 
-//----------------------------------------------
 //  매칭 요청
-//----------------------------------------------
 void MatchManager::RequestMatch(Session* session)
 {
     std::lock_guard<std::mutex> lock(queueMtx);
@@ -32,9 +31,7 @@ void MatchManager::RequestMatch(Session* session)
 }
 
 
-//----------------------------------------------
 //  매칭 취소
-//----------------------------------------------
 void MatchManager::CancelMatch(Session* session)
 {
     std::lock_guard<std::mutex> lock(queueMtx);
@@ -59,9 +56,7 @@ void MatchManager::CancelMatch(Session* session)
     );
 }
 
-//----------------------------------------------
 //  매칭 처리
-//----------------------------------------------
 void MatchManager::TryMatch()
 {
     if (matchQueue.size() < 2)
@@ -113,7 +108,7 @@ void MatchManager::TryMatch()
                 continue;
             }
 
-            // ───────── 매칭 성사 ─────────
+            // 매칭 성사 
             StartBattle(a, b);
             matched = true;
             break;
@@ -166,105 +161,140 @@ void MatchManager::StartBattle(Session* a, Session* b)
 }
 
 
-void MatchManager::ProcessResult(Session* winner, Session* loser)
+//void MatchManager::ProcessResult(Session* winner, Session* loser)
+//{
+//    if (!winner || !loser)
+//        return;
+//
+//    // ------------------------
+//    // 랭크 데이터 로드
+//    // ------------------------
+//    UserRankData winRank{};
+//    UserRankData loseRank{};
+//
+//    if (!UserManager::LoadUserRank(winner->userId, winRank)) return;
+//    if (!UserManager::LoadUserRank(loser->userId, loseRank)) return;
+//
+//    // ------------------------
+//    // 랭크 차이 계산
+//    // ------------------------
+//    int rankDiff = winRank.rank - loseRank.rank;
+//    int baseDelta = CalculateBaseDelta(abs(rankDiff));
+//
+//    int winDelta = baseDelta;
+//    int loseDelta = -baseDelta;
+//
+//    // 낮은 랭크가 이긴 경우 → 보너스
+//    if (rankDiff < 0)
+//        winDelta = static_cast<int>(winDelta * 1.5f);
+//
+//    // 높은 랭크가 진 경우 → 패널티 증가
+//    if (rankDiff > 0)
+//        loseDelta = static_cast<int>(loseDelta * 1.5f);
+//
+//    // ------------------------
+//    // 점수 반영
+//    // ------------------------
+//    winRank.mmr += winDelta;
+//    winRank.rankScore += winDelta;
+//
+//    loseRank.mmr += loseDelta;
+//    loseRank.rankScore += loseDelta;
+//
+//    // 음수 방지
+//    if (loseRank.rankScore < 0) loseRank.rankScore = 0;
+//    if (loseRank.mmr < 0) loseRank.mmr = 0;
+//
+//    // ------------------------
+//    // 랭크 재계산
+//    // ------------------------
+//    winRank.rank = CalculateRankFromScore(winRank.rankScore);
+//    loseRank.rank = CalculateRankFromScore(loseRank.rankScore);
+//
+//    // ------------------------
+//    // 랭크 저장
+//    // ------------------------
+//    UserManager::SaveUserRank(winner->userId, winRank);
+//    UserManager::SaveUserRank(loser->userId, loseRank);
+//
+//    // ------------------------
+//    // UserInfo (승/패/EXP)
+//    // ------------------------
+//    UserInfoData winInfo{};
+//    UserInfoData loseInfo{};
+//
+//    UserManager::LoadUserInfo(winner->userId, winInfo);
+//    UserManager::LoadUserInfo(loser->userId, loseInfo);
+//
+//    // 승패 기록
+//    winInfo.win += 1;
+//    loseInfo.lose += 1;
+//
+//    // 경험치 계산
+//    int winExp = 50 + (loseRank.rank * 10);
+//    int loseExp = 20 + (winRank.rank * 5);
+//
+//    winInfo.exp += winExp;
+//    loseInfo.exp += loseExp;
+//
+//    // 레벨업 처리 (레벨 * 100 기준)
+//    while (winInfo.exp >= winInfo.level * 100)
+//    {
+//        winInfo.exp -= winInfo.level * 100;
+//        winInfo.level += 1;
+//    }
+//
+//    while (loseInfo.exp >= loseInfo.level * 100)
+//    {
+//        loseInfo.exp -= loseInfo.level * 100;
+//        loseInfo.level += 1;
+//    }
+//
+//    // 저장
+//    UserManager::SaveUserRank(winner->userId, winRank);
+//    UserManager::SaveUserRank(loser->userId, loseRank);
+//
+//    std::cout << "[MATCH RESULT] "
+//        << winner->userId << " WIN (+"
+//        << winDelta << " MMR) | "
+//        << loser->userId << " LOSE ("
+//        << loseDelta << " MMR)\n";
+//}
+
+void MatchManager::ProcessResultById(
+    const std::string& winnerId,
+    const std::string& loserId)
 {
-    if (!winner || !loser)
-        return;
+    // DBWorker에는 "DB 저장"만 맡김
+    g_dbWorker->Enqueue([winnerId, loserId]() {
 
-    // ------------------------
-    // 랭크 데이터 로드
-    // ------------------------
-    UserRankData winRank{};
-    UserRankData loseRank{};
+        UserRankData winRank{}, loseRank{};
+        UserInfoData winInfo{}, loseInfo{};
 
-    if (!UserManager::LoadUserRank(winner->userId, winRank)) return;
-    if (!UserManager::LoadUserRank(loser->userId, loseRank)) return;
+        if (!UserManager::LoadUserRank(winnerId, winRank)) return;
+        if (!UserManager::LoadUserRank(loserId, loseRank)) return;
 
-    // ------------------------
-    // 랭크 차이 계산
-    // ------------------------
-    int rankDiff = winRank.rank - loseRank.rank;
-    int baseDelta = CalculateBaseDelta(abs(rankDiff));
+        // 계산
+        int rankDiff = winRank.rank - loseRank.rank;
+        int delta = CalculateBaseDelta(abs(rankDiff));
 
-    int winDelta = baseDelta;
-    int loseDelta = -baseDelta;
+        winRank.mmr += delta;
+        loseRank.mmr -= delta;
 
-    // 낮은 랭크가 이긴 경우 → 보너스
-    if (rankDiff < 0)
-        winDelta = static_cast<int>(winDelta * 1.5f);
+        UserManager::SaveUserRank(winnerId, winRank);
+        UserManager::SaveUserRank(loserId, loseRank);
 
-    // 높은 랭크가 진 경우 → 패널티 증가
-    if (rankDiff > 0)
-        loseDelta = static_cast<int>(loseDelta * 1.5f);
+        UserManager::LoadUserInfo(winnerId, winInfo);
+        UserManager::LoadUserInfo(loserId, loseInfo);
 
-    // ------------------------
-    // 점수 반영
-    // ------------------------
-    winRank.mmr += winDelta;
-    winRank.rankScore += winDelta;
+        winInfo.win++;
+        loseInfo.lose++;
 
-    loseRank.mmr += loseDelta;
-    loseRank.rankScore += loseDelta;
-
-    // 음수 방지
-    if (loseRank.rankScore < 0) loseRank.rankScore = 0;
-    if (loseRank.mmr < 0) loseRank.mmr = 0;
-
-    // ------------------------
-    // 랭크 재계산
-    // ------------------------
-    winRank.rank = CalculateRankFromScore(winRank.rankScore);
-    loseRank.rank = CalculateRankFromScore(loseRank.rankScore);
-
-    // ------------------------
-    // 랭크 저장
-    // ------------------------
-    UserManager::SaveUserRank(winner->userId, winRank);
-    UserManager::SaveUserRank(loser->userId, loseRank);
-
-    // ------------------------
-    // UserInfo (승/패/EXP)
-    // ------------------------
-    UserInfoData winInfo{};
-    UserInfoData loseInfo{};
-
-    UserManager::LoadUserInfo(winner->userId, winInfo);
-    UserManager::LoadUserInfo(loser->userId, loseInfo);
-
-    // 승패 기록
-    winInfo.win += 1;
-    loseInfo.lose += 1;
-
-    // 경험치 계산
-    int winExp = 50 + (loseRank.rank * 10);
-    int loseExp = 20 + (winRank.rank * 5);
-
-    winInfo.exp += winExp;
-    loseInfo.exp += loseExp;
-
-    // 레벨업 처리 (레벨 * 100 기준)
-    while (winInfo.exp >= winInfo.level * 100)
-    {
-        winInfo.exp -= winInfo.level * 100;
-        winInfo.level += 1;
-    }
-
-    while (loseInfo.exp >= loseInfo.level * 100)
-    {
-        loseInfo.exp -= loseInfo.level * 100;
-        loseInfo.level += 1;
-    }
-
-    // 저장
-    UserManager::SaveUserRank(winner->userId, winRank);
-    UserManager::SaveUserRank(loser->userId, loseRank);
-
-    std::cout << "[MATCH RESULT] "
-        << winner->userId << " WIN (+"
-        << winDelta << " MMR) | "
-        << loser->userId << " LOSE ("
-        << loseDelta << " MMR)\n";
+        UserManager::SaveUserInfo(winnerId, winInfo);
+        UserManager::SaveUserInfo(loserId, loseInfo);
+        });
 }
+
 
 int MatchManager::CalculateBaseDelta(int rankDiff)
 {

@@ -17,6 +17,8 @@
 #include "IOCP_Send.h"
 #include "IOCP_Recv.h"
 #include "UserManager.h"
+#include "DBWorker.h"
+#include "DBWorker.h"
 
 class IOCP_GameServer
 {
@@ -42,8 +44,8 @@ private:
     SOCKET listenSock;
     HANDLE iocpHandle;
 
-    LPFN_ACCEPTEX fnAcceptEx;
-    LPFN_GETACCEPTEXSOCKADDRS fnGetAcceptExSockAddr;
+    LPFN_ACCEPTEX fnAcceptEx = nullptr;
+    LPFN_GETACCEPTEXSOCKADDRS fnGetAcceptExSockAddr = nullptr;
 
     std::vector<std::thread> workerThreads;
     std::atomic<bool> running;
@@ -65,4 +67,6 @@ private:
 
     IOCP_Recv* recvProcessor;
     IOCP_Send* sendProcessor;
+
+    DBWorker dbWorker;
 };

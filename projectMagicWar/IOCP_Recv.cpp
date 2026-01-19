@@ -3,6 +3,7 @@
 #include "IOCP_Defines.h"
 #include <iostream>
 
+// 비동기 WSARecv를 등록하여 세션의 다음 수신을 대기시키는 함수
 void IOCP_Recv::PostRecv(Session* session)
 {
     if (!session)
@@ -10,13 +11,6 @@ void IOCP_Recv::PostRecv(Session* session)
         std::cout << "[RECV][POST] session nullptr\n";
         return;
     }
-
-    std::cout
-        << "[RECV][POST] 진입 "
-        << "sessionId=" << session->sessionId
-        << " closing=" << session->closing
-        << " sock=" << session->sock
-        << "\n";
 
     if (session->closing)
     {
@@ -67,34 +61,12 @@ void IOCP_Recv::PostRecv(Session* session)
             bufPool->Release(ov->bufferPtr);
             ovPool->Release(ov);
         }
-        else
-        {
-            std::cout
-                << "[RECV][POST] WSARecv 등록됨 (IO_PENDING) "
-                << "sessionId=" << session->sessionId
-                << "\n";
-        }
-    }
-    else
-    {
-        std::cout
-            << "[RECV][POST] WSARecv 즉시 완료 "
-            << "recvBytes=" << recvBytes
-            << " sessionId=" << session->sessionId
-            << "\n";
     }
 }
 
-
+// 수신 완료된 데이터를 세션 버퍼에 누적하고 패킷 파싱 후 다음 수신을 재등록하는 함수
 void IOCP_Recv::RecvCompletion(Session* session, OverlappedEx* ov, DWORD bytes)
 {
-    std::cout
-        << "[RECV] RecvCompletion 진입 "
-        << "bytes=" << bytes
-        << " closing=" << session->closing
-        << " recvUsed=" << session->recvUsed
-        << "\n";
-
     if (bytes == 0)
     {
         std::cout

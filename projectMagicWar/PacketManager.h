@@ -22,6 +22,7 @@ public:
     static void HandlePacket(
         Session* session,
         int packetId,
+        uint32_t recvToken,
         const char* body,
         int bodySize);
 
@@ -48,7 +49,7 @@ private:
     static void HandleDie(Session* winner, Session* loser);
     static void HandleCastMagic(Session* s, const char* body, int size);
     static void HandleMagicDetailGAME(Session* s, const char* body, int bodySize);
-
+    static void HandleCastFieldMagic(Session* s, const char* body, int bodySize);
 
     static void SendSignupAck(Session* s, uint16_t result);
     static void SendLoginAck(Session* s, uint16_t result);

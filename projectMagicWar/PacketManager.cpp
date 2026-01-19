@@ -5,6 +5,7 @@
 #include "PasswordHasher.h"
 #include "MatchManager.h"
 #include "PacketStruct.h"
+#include "DBWorkerInstance.h"
 
 #include <iostream>
 #include <random>
@@ -13,59 +14,54 @@
 #include <algorithm>
 #include <sstream>
 
-// ---------------------------
-// static members
-// ---------------------------
 std::unordered_map<std::string, Session*>* PacketManager::s_userMap = nullptr;
 MatchManager* PacketManager::s_matchMgr = nullptr;
 IOCP_Send* PacketManager::s_sendProc = nullptr;
 std::mutex PacketManager::s_userMapMtx;
-// ---------------------------
-// util
-// ---------------------------
+
+// 로그인 성공 시 세션에서 사용할 랜덤 토큰을 생성한다.
 static uint32_t GenerateRandomToken()
 {
+	std::cout << "[TOKEN] GenerateRandomToken 시작\n";
+
 	std::random_device rd;
 	std::mt19937 gen(rd());
 	std::uniform_int_distribution<uint32_t> dis;
 	return dis(gen);
 }
 
-// ---------------------------
-// Init
-// ---------------------------
+// PacketManager가 사용할 전역 객체 포인터들을 초기화한다.
 void PacketManager::Init(
 	std::unordered_map<std::string, Session*>* userMap,
 	MatchManager* matchMgr,
 	IOCP_Send* sendProc)
 {
+	std::cout << "[INIT] PacketManager 초기화 시작\n";
+
 	s_userMap = userMap;
 	s_matchMgr = matchMgr;
 	s_sendProc = sendProc;
 }
 
-// ---------------------------
-// Packet Entry
-// ---------------------------
+// 모든 네트워크 패킷의 진입 지점에서 보안 검증 후 처리 함수로 분기한다.
 void PacketManager::HandlePacket(
 	Session* session,
 	int packetId,
+	uint32_t recvToken,
 	const char* body,
 	int bodySize)
-{	
+{
+	std::cout << "[PACKET] HandlePacket 시작\n";
+
 	if (!session || session->closing)
 		return;
 
-	// ---------------------------
-	// [SECURITY CHECK]
-	// ---------------------------
 	bool authFree =
 		packetId == PKT_LOGIN ||
 		packetId == PKT_SIGNUP ||
 		packetId == PKT_LOGOUT ||
 		packetId == PKT_PING ||
 		packetId == PKT_PING_ACK;
-
 
 	if (!authFree)
 	{
@@ -83,6 +79,16 @@ void PacketManager::HandlePacket(
 		{
 			std::cout << "[SECURITY] token missing "
 				<< "session=" << session->sessionId
+				<< "\n";
+			session->closing = true;
+			return;
+		}
+
+		if (recvToken != session->token)
+		{
+			std::cout << "[SECURITY] token mismatch "
+				<< "recv=" << recvToken
+				<< " expected=" << session->token
 				<< "\n";
 			session->closing = true;
 			return;
@@ -148,6 +154,9 @@ void PacketManager::HandlePacket(
 	case PKT_REQ_MAGIC_DETAIL_GAME:
 		HandleMagicDetailGAME(session, body, bodySize);
 		break;
+	case PKT_CAST_FIELD_MAGIC:
+		HandleCastFieldMagic(session, body, bodySize);
+		break;
 	case PKT_PING:
 		HandlePING(session);
 		break;
@@ -157,13 +166,15 @@ void PacketManager::HandlePacket(
 	}
 }
 
+// 클라이언트의 Ping 요청에 대해 응답 패킷을 전송한다.
 void PacketManager::HandlePING(Session* s)
 {
+	std::cout << "[PING] HandlePING 시작\n";
+
 	if (!s) return;
 
 	std::cout << "[HELLO] from sessionId=" << s->sessionId << "\n";
 
-	// 서버 응답
 	SendPacket(
 		s,
 		PKT_PING_ACK,
@@ -172,16 +183,15 @@ void PacketManager::HandlePING(Session* s)
 	);
 }
 
-
-// ---------------------------
-// Send Packet
-// ---------------------------
+// 패킷 헤더를 포함한 데이터를 IOCP 송신 큐에 등록한다.
 void PacketManager::SendPacket(
 	Session* session,
 	uint16_t packetId,
 	const void* data,
 	uint16_t dataSize)
 {
+	std::cout << "[SEND] SendPacket 시작\n";
+
 	if (!session || session->closing)
 		return;
 
@@ -197,8 +207,11 @@ void PacketManager::SendPacket(
 	s_sendProc->EnqueueSend(session, buf.data(), (int)buf.size());
 }
 
+// 세션 종료 시 유저 정보를 정리하고 유저 맵에서 제거한다.
 void PacketManager::HandleSessionDisconnect(Session* s)
 {
+	std::cout << "[DISCONNECT] HandleSessionDisconnect 시작\n";
+
 	if (!s) return;
 
 	if (!s->userId.empty())
@@ -212,9 +225,11 @@ void PacketManager::HandleSessionDisconnect(Session* s)
 	s->closing = true;
 }
 
-// Signup
+// 회원가입 요청을 처리하고 신규 계정을 생성한다.
 void PacketManager::HandleSignup(Session* s, const char* body, int size)
 {
+	std::cout << "[SIGNUP] 처리 시작\n";
+
 	std::cout << "[SIGNUP] HandleSignup 진입 size=" << size << "\n";
 
 	if (size != sizeof(PKT_SIGNUP_REQ))
@@ -256,9 +271,11 @@ void PacketManager::HandleSignup(Session* s, const char* body, int size)
 }
 
 
-// Login
+// 로그인 요청을 처리하고 세션 인증 상태를 설정한다.
 void PacketManager::HandleLogin(Session* s, const char* body, int size)
 {
+	std::cout << "[LOGIN] 처리 시작\n";
+
 	std::cout << "[LOGIN] HandleLogin 진입 size=" << size << "\n";
 
 	if (size != sizeof(PKT_LOGIN_REQ))
@@ -276,7 +293,6 @@ void PacketManager::HandleLogin(Session* s, const char* body, int size)
 
 	std::cout << "[LOGIN] 로그인 시도 id=" << id << "\n";
 
-	// 🔑 여기서 비밀번호 검증은 이미 끝남
 	if (!UserManager::CheckLogin(id, pw, nick))
 	{
 		std::cout << "[LOGIN] 비밀번호 불일치 또는 ID 없음\n";
@@ -291,7 +307,6 @@ void PacketManager::HandleLogin(Session* s, const char* body, int size)
 		return;
 	}
 
-	// ===== 로그인 성공 처리 =====
 	s->userId = id;
 	s->nickname = nick;
 	s->authenticated = true;
@@ -313,9 +328,12 @@ void PacketManager::HandleLogin(Session* s, const char* body, int size)
 	std::cout << "[LOGIN] 완료 user=" << id << "\n";
 }
 
-// Profile
+
+// 유저 프로필 정보를 조회하여 클라이언트로 전달한다.
 void PacketManager::HandleProfileRequest(Session* s, const char* body, int bodySize)
 {
+	std::cout << "[PROFILE] 처리 시작\n";
+
 	std::cout << "[PROFILE] 요청 수신 bodySize=" << bodySize << "\n";
 
 	if (!s)
@@ -330,18 +348,12 @@ void PacketManager::HandleProfileRequest(Session* s, const char* body, int bodyS
 		return;
 	}
 
-	// ------------------------
-	// 유저 ID 추출
-	// ------------------------
 	char idBuf[33]{};
 	memcpy(idBuf, body, 32);
 	std::string userId(idBuf);
 
 	std::cout << "[PROFILE] 요청 userId=" << userId << "\n";
 
-	// ------------------------
-	// 프로필 로드 (DB)
-	// ------------------------
 	UserProfileData userProfile{};
 	if (!UserManager::LoadUserProfile(userId, userProfile))
 	{
@@ -352,9 +364,6 @@ void PacketManager::HandleProfileRequest(Session* s, const char* body, int bodyS
 	const UserInfoData& info = userProfile.info;
 	const UserRankData& rankData = userProfile.rank;
 
-	// ------------------------
-	// 랭크 테이블 조회
-	// ------------------------
 	const RankInfo* rankInfo = UserManager::GetRankInfo(rankData.rank);
 	if (!rankInfo)
 	{
@@ -363,37 +372,38 @@ void PacketManager::HandleProfileRequest(Session* s, const char* body, int bodyS
 		return;
 	}
 
-	// ------------------------
-	// 프로필 응답 패킷 구성
-	// ------------------------
 	PKT_RES_PROFILE_DATA pkt{};
 
-	// nickname은 로그인 시 세션에 저장되어 있어야 정상 구조
-	memcpy(pkt.nickname,
+	memcpy(
+		pkt.nickname,
 		s->nickname.c_str(),
-		std::min<size_t>(31, s->nickname.size()));
+		std::min<size_t>(31, s->nickname.size())
+	);
 
 	pkt.level = info.level;
 	pkt.exp = info.exp;
 	pkt.rank = rankData.rank;
 	pkt.rankScore = rankData.rankScore;
 
-	memcpy(pkt.rankName,
+	memcpy(
+		pkt.rankName,
 		rankInfo->name.c_str(),
-		std::min<size_t>(15, rankInfo->name.size()));
+		std::min<size_t>(15, rankInfo->name.size())
+	);
 
 	pkt.minScore = rankInfo->minScore;
 	pkt.maxScore = rankInfo->maxScore;
 
-	// ------------------------
-	// 패킷 전송
-	// ------------------------
 	std::cout << "[PROFILE] 프로필 패킷 전송\n";
 	SendPacket(s, PKT_RES_PROFILE, &pkt, sizeof(pkt));
 }
 
+
+// 로그아웃 요청을 처리하고 세션을 종료 상태로 전환한다.
 void PacketManager::HandleLogout(Session* s)
 {
+	std::cout << "[LOGOUT] 처리 시작\n";
+
 	if (!s || s->userId.empty())
 		return;
 
@@ -408,9 +418,11 @@ void PacketManager::HandleLogout(Session* s)
 }
 
 
-
+// 로비 채팅 메시지를 접속 중인 모든 유저에게 브로드캐스트한다.
 void PacketManager::HandleLobbyChat(Session* sender, const char* body, int bodySize)
 {
+	std::cout << "[LOBBY CHAT] 처리 시작\n";
+
 	if (bodySize <= 0 || sender->inBattle)
 		return;
 
@@ -436,7 +448,6 @@ void PacketManager::HandleLobbyChat(Session* sender, const char* body, int bodyS
 		if (session->inBattle)
 			continue;
 
-		//  여기서 “누구에게 보내는지” 확인 가능
 		std::cout << "  → 수신자: "
 			<< session->userId
 			<< " (token=" << session->token << ")"
@@ -448,8 +459,12 @@ void PacketManager::HandleLobbyChat(Session* sender, const char* body, int bodyS
 	std::cout << "[LOBBY CHAT] 브로드캐스트 완료\n";
 }
 
+
+// 유저가 보유한 마법 슬롯 정보를 조회하여 전송한다.
 void PacketManager::HandleUserMagicRequest(Session* s)
 {
+	std::cout << "[MAGIC] HandleUserMagicRequest 시작\n";
+
 	if (!s || !s->authenticated)
 		return;
 
@@ -480,8 +495,12 @@ void PacketManager::HandleUserMagicRequest(Session* s)
 	std::cout << "[MAGIC] 슬롯 바이너리 전송 완료 user=" << s->userId << "\n";
 }
 
+
+// 특정 마법 카드의 상세 정보를 조회하여 전송한다.
 void PacketManager::HandleUserMagicDetail(Session* s, const char* body, int bodySize)
 {
+	std::cout << "[MAGIC DETAIL] HandleUserMagicDetail 시작\n";
+
 	if (bodySize != sizeof(PKT_REQ_MAGIC_DETAIL_STRUCT))
 	{
 		std::cout << "[MAGIC DETAIL] bodySize 오류\n";
@@ -509,28 +528,19 @@ void PacketManager::HandleUserMagicDetail(Session* s, const char* body, int body
 	pkt.duration = card->duration;
 	pkt.amount = card->amount;
 
-	strncpy_s(
-		pkt.name,
-		sizeof(pkt.name),
-		card->name.c_str(),
-		_TRUNCATE
-	);
-
-	strncpy_s(
-		pkt.effectType,
-		sizeof(pkt.effectType),
-		card->effectType.c_str(),
-		_TRUNCATE
-	);
-
+	strncpy_s(pkt.name, sizeof(pkt.name), card->name.c_str(), _TRUNCATE);
+	strncpy_s(pkt.effectType, sizeof(pkt.effectType), card->effectType.c_str(), _TRUNCATE);
 
 	SendPacket(s, PKT_RES_MAGIC_DETAIL, &pkt, sizeof(pkt));
 
 	std::cout << "[MAGIC DETAIL] 전송 완료 id=" << req.cardId << "\n";
 }
 
+// 유저의 마법 슬롯 구성을 교체하고 결과를 응답한다.
 void PacketManager::HandleReplaceUserMagic(Session* s, const char* body, int bodySize)
 {
+	std::cout << "[MAGIC REPLACE] 처리 시작\n";
+
 	if (!s || !s->authenticated)
 		return;
 
@@ -567,6 +577,8 @@ void PacketManager::HandleReplaceUserMagic(Session* s, const char* body, int bod
 		<< "\n";
 }
 
+
+// 전투 중 캐릭터의 이동 정보를 서버에 반영하고 상대에게 전달한다.
 void PacketManager::HandleMove(Session* s, const char* body, int size)
 {
 	if (!s)
@@ -596,15 +608,9 @@ void PacketManager::HandleMove(Session* s, const char* body, int size)
 	PKT_MOVE_STRUCT pkt{};
 	memcpy(&pkt, body, sizeof(pkt));
 
-	// 서버 상태 갱신
 	s->posX = pkt.x;
 	s->posY = pkt.y;
 
-	cout << "[MOVE] 이동중 user=" << s->userId
-		<< " x=" << pkt.x
-		<< " y=" << pkt.y << endl;
-
-	// 핵심: 상대에게 이동 패킷 전달
 	PacketManager::SendPacket(
 		s->battleOpponent,
 		PKT_MOVE,
@@ -613,29 +619,29 @@ void PacketManager::HandleMove(Session* s, const char* body, int size)
 	);
 }
 
+
+// 공격 패킷을 처리하여 데미지와 상태 이상을 적용한다.
 void PacketManager::HandleHit(Session* attacker, const char* body, int bodySize)
 {
-	// ─────────────────────────────
-	// 0. 패킷 크기 검증
-	// ─────────────────────────────
+	std::cout << "[HIT] 처리 시작\n";
+
+	constexpr int CARD_ICEBALL = 1;
+	constexpr int CARD_ELECTRICBALL = 2;
+	constexpr int CARD_ICEFIELDS = 3;
+	constexpr int CARD_POISON_MIST = 4;
+
 	if (bodySize != sizeof(PKT_HIT_STRUCT))
 		return;
 
 	PKT_HIT_STRUCT pkt{};
 	memcpy(&pkt, body, sizeof(pkt));
 
-	// ─────────────────────────────
-	// 1. 공격자 검증
-	// ─────────────────────────────
 	if (!attacker)
 		return;
 
 	if (attacker->userId != pkt.attackerId)
 		return;
 
-	// ─────────────────────────────
-	// 2. 타겟 세션 찾기
-	// ─────────────────────────────
 	Session* target = nullptr;
 	{
 		std::lock_guard<std::mutex> lock(s_userMapMtx);
@@ -647,27 +653,69 @@ void PacketManager::HandleHit(Session* attacker, const char* body, int bodySize)
 	if (!target)
 		return;
 
-	// 자기 자신 공격 방지
 	if (attacker->userId == target->userId)
 		return;
 
-	// ─────────────────────────────
-	// 3. 전투 상태 검증
-	// ─────────────────────────────
 	if (!attacker->inBattle || !target->inBattle)
 		return;
 
 	if (attacker->roomId != target->roomId)
 		return;
 
-	// ─────────────────────────────
-	// 4. 데미지 처리
-	// ─────────────────────────────
+	uint64_t now = GetTickCount64();
+
+	if (pkt.cardId == CARD_POISON_MIST)
+	{
+		if (now < target->nextDotTickTime)
+			return;
+
+		target->nextDotTickTime = now + 1000;
+
+		int dotDamage = 5; // DB amount
+		target->currentHp -= dotDamage;
+
+		if (target->currentHp < 0)
+			target->currentHp = 0;
+
+		std::cout
+			<< "[DOT] PoisonMist tick "
+			<< target->userId
+			<< " dmg=" << dotDamage
+			<< " hp=" << target->currentHp
+			<< std::endl;
+
+		SendHPResult(target);
+
+		if (target->currentHp <= 0)
+			HandleDie(attacker, target);
+
+		return; // ⭐ 반드시 종료
+	}
+
+	if (pkt.cardId == CARD_ICEFIELDS)
+	{
+		float slowRatio = 0.4f;
+		int durationMs = 1000;
+
+		target->isSlowed = true;
+		target->slowRatio = slowRatio;
+		target->slowEndTime = now + durationMs;
+
+		SendSlow(target, slowRatio, durationMs);
+
+		std::cout
+			<< "[ICE FIELD SLOW] applied to "
+			<< target->userId
+			<< " ratio=" << slowRatio
+			<< " refresh=" << durationMs
+			<< std::endl;
+
+		return; // ⭐ 데미지 로직 차단
+	}
+
 	int dmg = pkt.damage;
-	if (dmg < 1)
-		dmg = 1;
-	else if (dmg > 1000)
-		dmg = 1000;
+	if (dmg < 1) dmg = 1;
+	else if (dmg > 1000) dmg = 1000;
 
 	target->currentHp -= dmg;
 	if (target->currentHp < 0)
@@ -682,34 +730,18 @@ void PacketManager::HandleHit(Session* attacker, const char* body, int bodySize)
 		<< " hp=" << target->currentHp
 		<< std::endl;
 
-	// ─────────────────────────────
-	// 5. 카드 ID 기반 상태이상 판정
-	// ─────────────────────────────
-	constexpr int CARD_ICEBALL = 1; // 슬로우
-	constexpr int CARD_ELECTRICBALL = 2; // 스턴
-
-	uint64_t now = GetTickCount64();
-
-	// 카드 1 : 아이스볼 → 슬로우
+	// 상태 이상
 	if (pkt.cardId == CARD_ICEBALL)
 	{
-		float slowRatio = 0.5f;   // 이동속도 50%
-		int durationMs = 3000;   // 3초
+		float slowRatio = 0.5f;
+		int durationMs = 3000;
 
 		target->isSlowed = true;
 		target->slowRatio = slowRatio;
 		target->slowEndTime = now + durationMs;
 
 		SendSlow(target, slowRatio, durationMs);
-
-		std::cout
-			<< "[SLOW] applied to "
-			<< target->userId
-			<< " ratio=" << slowRatio
-			<< " duration=" << durationMs
-			<< std::endl;
 	}
-	// 카드 2 : 일렉트릭볼 → 스턴
 	else if (pkt.cardId == CARD_ELECTRICBALL)
 	{
 		int durationMs = 5000;
@@ -718,76 +750,51 @@ void PacketManager::HandleHit(Session* attacker, const char* body, int bodySize)
 		target->stunEndTime = now + durationMs;
 
 		SendStun(target, durationMs);
-
-		std::cout
-			<< "[STUN] applied to "
-			<< target->userId
-			<< " duration=" << durationMs
-			<< std::endl;
 	}
 
-	// ─────────────────────────────
-	// 6. HP 결과 전송
-	// ─────────────────────────────
 	SendHPResult(attacker);
 	SendHPResult(target);
 
-	// ─────────────────────────────
-	// 7. 사망 판정
-	// ─────────────────────────────
 	if (target->currentHp <= 0)
-	{
 		HandleDie(attacker, target);
-	}
 }
 
 
+// 전투 종료 시 승패 처리와 결과 전송 및 DB 갱신을 수행한다.
 void PacketManager::HandleDie(Session* winner, Session* loser)
 {
+	std::cout << "[DIE] 처리 시작\n";
+
 	if (!winner || !loser)
 		return;
 
-	std::cout << "[DIE] "
-		<< loser->userId
-		<< " defeated by "
-		<< winner->userId
-		<< std::endl;
-
-	// -----------------------------
-	// 1. DIE 패킷 즉시 전송
-	// -----------------------------
 	PKT_DIE_STRUCT diePkt{};
-	strncpy_s(diePkt.deadUserId,
-		sizeof(diePkt.deadUserId),
-		loser->userId.c_str(),
-		_TRUNCATE);
+	strncpy_s(diePkt.deadUserId, loser->userId.c_str(), _TRUNCATE);
 
 	SendPacket(winner, PKT_DIE, &diePkt, sizeof(diePkt));
 	SendPacket(loser, PKT_DIE, &diePkt, sizeof(diePkt));
 
-	// -----------------------------
-	// 2. 지연 결과 처리 (this 제거)
-	// -----------------------------
-	std::thread([winner, loser]()
+	std::string winId = winner->userId;
+	std::string loseId = loser->userId;
+
+	std::thread([winId, loseId, winner, loser]()
 		{
 			std::this_thread::sleep_for(std::chrono::seconds(3));
 
-			PKT_RESULT_STRUCT victory{};
-			strncpy_s(victory.userId,
-				sizeof(victory.userId),
-				winner->userId.c_str(),
-				_TRUNCATE);
+			PKT_RESULT_STRUCT v{}, d{};
+			strncpy_s(v.userId, winId.c_str(), _TRUNCATE);
+			strncpy_s(d.userId, loseId.c_str(), _TRUNCATE);
 
-			PKT_RESULT_STRUCT defeat{};
-			strncpy_s(defeat.userId,
-				sizeof(defeat.userId),
-				loser->userId.c_str(),
-				_TRUNCATE);
+			SendPacket(winner, PKT_VICTORY, &v, sizeof(v));
+			SendPacket(loser, PKT_DEFEAT, &d, sizeof(d));
 
-			SendPacket(winner, PKT_VICTORY, &victory, sizeof(victory));
-			SendPacket(loser, PKT_DEFEAT, &defeat, sizeof(defeat));
-
-			MatchManager::ProcessResult(winner, loser);
+			if (g_dbWorker)
+			{
+				g_dbWorker->Enqueue([winId, loseId]()
+					{
+						MatchManager::ProcessResultById(winId, loseId);
+					});
+			}
 
 			winner->inBattle = false;
 			loser->inBattle = false;
@@ -798,21 +805,20 @@ void PacketManager::HandleDie(Session* winner, Session* loser)
 }
 
 
-
+// 마법 시전 요청을 처리하여 상대 클라이언트에 투사체를 생성한다.
 void PacketManager::HandleCastMagic(Session* s, const char* body, int bodySize)
 {
-	// 1. 기본 검증
+	std::cout << "[CAST MAGIC] 처리 시작\n";
+
 	if (!s || bodySize != sizeof(PKT_CAST_MAGIC_STRUCT))
 		return;
 
 	if (!s->inBattle || !s->battleOpponent)
 		return;
 
-	// 2. CAST 패킷 파싱 (방향 벡터)
 	PKT_CAST_MAGIC_STRUCT recv{};
 	memcpy(&recv, body, sizeof(recv));
 
-	// 3. 카드 정보 조회 (UserManager 기준)
 	const CardInfo* card = UserManager::GetCardInfo(recv.cardId);
 	if (!card)
 	{
@@ -821,7 +827,6 @@ void PacketManager::HandleCastMagic(Session* s, const char* body, int bodySize)
 		return;
 	}
 
-	// 4. SPAWN 패킷 구성
 	PKT_SPAWN_MAGIC_STRUCT send{};
 	memset(send.casterId, 0, sizeof(send.casterId));
 	strncpy_s(
@@ -837,7 +842,6 @@ void PacketManager::HandleCastMagic(Session* s, const char* body, int bodySize)
 	send.attack = card->attack;
 	send.projectileSpeed = card->speed;
 
-	// 5. 상대 클라이언트에게만 전송
 	SendPacket(
 		s->battleOpponent,
 		PKT_SPAWN_MAGIC,
@@ -855,11 +859,59 @@ void PacketManager::HandleCastMagic(Session* s, const char* body, int bodySize)
 		<< std::endl;
 }
 
+void PacketManager::HandleCastFieldMagic(
+	Session* s,
+	const char* body,
+	int bodySize)
+{
+	if (!s || bodySize != sizeof(PKT_CAST_FIELD_MAGIC_STRUCT))
+		return;
+
+	if (!s->inBattle || !s->battleOpponent)
+		return;
+
+	PKT_CAST_FIELD_MAGIC_STRUCT recv{};
+	memcpy(&recv, body, sizeof(recv));
+
+	const CardInfo* card = UserManager::GetCardInfo(recv.cardId);
+	if (!card)
+		return;
+
+	PKT_SPAWN_FIELD_MAGIC_STRUCT send{};
+	memset(&send, 0, sizeof(send));
+
+	strncpy_s(
+		send.casterId,
+		sizeof(send.casterId),
+		s->userId.c_str(),
+		_TRUNCATE
+	);
+
+	send.cardId = recv.cardId;
+	send.localX = recv.localX;
+	send.localY = recv.localY;
+	send.attack = card->attack;
+	send.radius = card->radius;
+	send.duration = card->duration;
+	send.amount = card->amount;
+
+	SendPacket(
+		s->battleOpponent,
+		PKT_SPAWN_FIELD_MAGIC,
+		&send,
+		sizeof(send)
+	);
+}
+
+
+// 게임 중 마법 카드의 상세 정보를 조회하여 전송한다.
 void PacketManager::HandleMagicDetailGAME(
 	Session* s,
 	const char* body,
 	int bodySize)
 {
+	std::cout << "[MAGIC DETAIL GAME] 처리 시작\n";
+
 	if (!s || bodySize != sizeof(PKT_REQ_MAGIC_DETAIL_STRUCT_GAME))
 	{
 		std::cout << "[MAGIC DETAIL][ERROR] invalid session or size "
@@ -886,7 +938,6 @@ void PacketManager::HandleMagicDetailGAME(
 		return;
 	}
 
-	// 카드 정보 확인용 로그
 	std::cout << "[MAGIC DETAIL][CARD DATA]\n"
 		<< "  id        : " << card->id << "\n"
 		<< "  attack    : " << card->attack << "\n"
@@ -925,24 +976,33 @@ void PacketManager::HandleMagicDetailGAME(
 }
 
 
-
-// Ack helpers
+// 회원가입 결과 응답 패킷을 전송한다.
 void PacketManager::SendSignupAck(Session* s, uint16_t result)
 {
+	std::cout << "[SIGNUP ACK] 처리 시작\n";
+
 	PKT_SIGNUP_ACK ack{};
 	ack.result = result;
 	SendPacket(s, result, &ack, sizeof(ack));
 }
 
+
+// 로그인 결과 응답 패킷을 전송한다.
 void PacketManager::SendLoginAck(Session* s, uint16_t result)
 {
+	std::cout << "[LOGIN ACK] 처리 시작\n";
+
 	PKT_LOGIN_ACK_STRUCT ack{};
 	ack.result = result;
 	SendPacket(s, result, &ack, sizeof(ack));
 }
 
+
+// 현재 HP 정보를 클라이언트로 전송한다.
 void PacketManager::SendHPResult(Session* s)
 {
+	std::cout << "[HP RESULT] 처리 시작\n";
+
 	if (!s) return;
 
 	PKT_RES_HP_STRUCT pkt{};
@@ -957,8 +1017,12 @@ void PacketManager::SendHPResult(Session* s)
 	);
 }
 
+
+// 슬로우 상태 이상을 클라이언트에 적용한다.
 void PacketManager::SendSlow(Session* target, float ratio, int durationMs)
 {
+	std::cout << "[SLOW] 처리 시작\n";
+
 	PKT_STATUS_SLOW_STRUCT pkt{};
 	strcpy_s(pkt.targetId, target->userId.c_str());
 	pkt.slowRatio = ratio;
@@ -967,8 +1031,12 @@ void PacketManager::SendSlow(Session* target, float ratio, int durationMs)
 	SendPacket(target, PKT_STATUS_SLOW, &pkt, sizeof(pkt));
 }
 
+
+// 스턴 상태 이상을 클라이언트에 적용한다.
 void PacketManager::SendStun(Session* target, int durationMs)
 {
+	std::cout << "[STUN] 처리 시작\n";
+
 	PKT_STATUS_STUN_STRUCT pkt{};
 	strcpy_s(pkt.targetId, target->userId.c_str());
 	pkt.durationMs = durationMs;

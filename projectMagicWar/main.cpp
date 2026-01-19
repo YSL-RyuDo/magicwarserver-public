@@ -4,7 +4,7 @@ using namespace std;
 
 int main()
 {
-    IOCP_GameServer server(9000);
+    IOCP_GameServer server(9000, 0, 8);
 
     server.Start();
 

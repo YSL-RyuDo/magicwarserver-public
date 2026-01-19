@@ -3,9 +3,6 @@
 
 #pragma pack(push, 1)
 
-// ---------------------------
-// Packet Header (8 bytes)
-// ---------------------------
 struct PACKET_HEADER
 {
     uint16_t packetId;
@@ -13,9 +10,6 @@ struct PACKET_HEADER
     uint16_t bodySize;
 };
 
-// ---------------------------
-// Signup Request (128)
-// ---------------------------
 struct PKT_SIGNUP_REQ
 {
     char id[32];
@@ -23,26 +17,17 @@ struct PKT_SIGNUP_REQ
     char nick[32];
 };
 
-// ---------------------------
-// Login Request (96)
-// ---------------------------
 struct PKT_LOGIN_REQ
 {
     char id[32];
     char pw[64];
 };
 
-// ---------------------------
-// Signup Ack
-// ---------------------------
 struct PKT_SIGNUP_ACK
 {
     uint16_t result;
 };
 
-// ---------------------------
-// Login Ack
-// ---------------------------
 struct PKT_LOGIN_ACK_STRUCT
 {
     uint16_t result;
@@ -50,9 +35,6 @@ struct PKT_LOGIN_ACK_STRUCT
     char nick[32];
 };
 
-// ---------------------------
-// Profile Response
-// ---------------------------
 struct PKT_RES_PROFILE_DATA
 {
     char nickname[32];
@@ -79,11 +61,10 @@ struct PKT_USER_MAGIC_STRUCT
     uint8_t slots[4];
 };
 
-
 struct PKT_RES_USER_MAGIC_STRUCT
 {
-    int32_t slotCount;     // 예: 4
-    int32_t cardIds[4];    // 슬롯 카드 ID
+    int32_t slotCount;
+    int32_t cardIds[4];
 };
 
 struct PKT_REQ_MAGIC_DETAIL_STRUCT
@@ -115,12 +96,12 @@ struct PKT_REQ_REPLACE_MAGIC_STURCT
 
 struct PKT_RES_REPLACE_USER_MAGIC_STURCT
 {
-    uint8_t result; // 1 = 성공, 0 = 실패
+    uint8_t result;
 };
 
 struct PKT_MATCH_RESPONSE_STRUCT
 {
-    uint8_t result;      // 0=WAIT, 1=OK, 2=FAIL
+    uint8_t result;
     uint32_t roomId;
 
     char userA[32];
@@ -155,17 +136,16 @@ struct PKT_CAST_MAGIC_STRUCT
     float dirY;
 };
 
-
 struct PKT_SPAWN_MAGIC_STRUCT
 {
-    char  casterId[32];     // 시전자 ID
+    char  casterId[32];
     int   cardId;
 
-    float dirX;             // 발사 방향 X
-    float dirY;             // 발사 방향 Y
+    float dirX;
+    float dirY;
 
-    int   attack;           // 서버 권위 공격력
-    float projectileSpeed;  // 서버 권위 속도
+    int   attack;
+    float projectileSpeed;
 };
 
 struct PKT_REQ_MAGIC_DETAIL_STRUCT_GAME
@@ -196,18 +176,40 @@ struct PKT_RESULT_STRUCT
     char userId[32];
 };
 
+struct PKT_CAST_FIELD_MAGIC_STRUCT
+{
+    int   cardId;
 
-//효과
+    float localX;
+    float localY;
+};
+
+struct PKT_SPAWN_FIELD_MAGIC_STRUCT
+{
+    char  casterId[32];
+    int   cardId;
+
+    // 필드 기준 local 좌표
+    float localX;
+    float localY;
+
+    int   attack;
+    float radius;
+    float duration;
+    int   amount;
+};
+
 struct PKT_STATUS_SLOW_STRUCT
 {
     char targetId[32];
-    float slowRatio;     // 예: 0.5f = 이동속도 50%
-    int durationMs;      // 지속 시간 (ms)
+    float slowRatio;
+    int durationMs;
 };
 
 struct PKT_STATUS_STUN_STRUCT
 {
     char targetId[32];
-    int durationMs;      // 지속 시간 (ms)
+    int durationMs;
 };
+
 #pragma pack(pop)

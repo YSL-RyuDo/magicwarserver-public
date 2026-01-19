@@ -4,17 +4,12 @@
 #include <mysql/mysql.h>
 #include <iostream>
 
-// =========================
-// static members
-// =========================
 std::mutex UserManager::s_mtx;
 std::unordered_set<std::string> UserManager::s_loggedIn;
 std::unordered_map<int, CardInfo> UserManager::s_cards;
 std::unordered_map<int, RankInfo> UserManager::s_ranks;
 
-// =================================================
-// Account
-// =================================================
+// 계정
 bool UserManager::AddUser(
     const std::string& id,
     const std::string& hash,
@@ -114,9 +109,7 @@ bool UserManager::IsNickExist(const std::string& nick)
     return exist;
 }
 
-// =================================================
-// Login state
-// =================================================
+// 로그인 상태
 bool UserManager::TryLoginUser(const std::string& id)
 {
     std::lock_guard<std::mutex> lock(s_mtx);
@@ -131,9 +124,7 @@ void UserManager::LogoutUser(const std::string& id)
     s_loggedIn.erase(id);
 }
 
-// =================================================
-// Load / Save
-// =================================================
+// 저장 및 불러오기
 bool UserManager::LoadUserInfo(const std::string& id, UserInfoData& out)
 {
     MYSQL* db = DBManager::Get();
@@ -236,27 +227,97 @@ bool UserManager::LoadUserMagic(const std::string& id, std::vector<int>& out)
     return true;
 }
 
+//bool UserManager::ReplaceUserMagic(
+//    const std::string& id, int oldCard, int newCard)
+//{
+//    MYSQL* db = DBManager::Get();
+//    return mysql_query(db,
+//        ("UPDATE user_magic SET "
+//            "magic0=IF(magic0=" + std::to_string(oldCard) + "," + std::to_string(newCard) + ",magic0),"
+//            "magic1=IF(magic1=" + std::to_string(oldCard) + "," + std::to_string(newCard) + ",magic1),"
+//            "magic2=IF(magic2=" + std::to_string(oldCard) + "," + std::to_string(newCard) + ",magic2),"
+//            "magic3=IF(magic3=" + std::to_string(oldCard) + "," + std::to_string(newCard) + ",magic3)"
+//            " WHERE user_id='" + id + "'").c_str()) == 0;
+//}
+
 bool UserManager::ReplaceUserMagic(
     const std::string& id, int oldCard, int newCard)
 {
     MYSQL* db = DBManager::Get();
-    return mysql_query(db,
-        ("UPDATE user_magic SET "
-            "magic0=IF(magic0=" + std::to_string(oldCard) + "," + std::to_string(newCard) + ",magic0),"
-            "magic1=IF(magic1=" + std::to_string(oldCard) + "," + std::to_string(newCard) + ",magic1),"
-            "magic2=IF(magic2=" + std::to_string(oldCard) + "," + std::to_string(newCard) + ",magic2),"
-            "magic3=IF(magic3=" + std::to_string(oldCard) + "," + std::to_string(newCard) + ",magic3)"
-            " WHERE user_id='" + id + "'").c_str()) == 0;
+
+    // 1. 현재 덱 로드
+    std::string select =
+        "SELECT magic0, magic1, magic2, magic3 "
+        "FROM user_magic WHERE user_id='" + id + "'";
+
+    if (mysql_query(db, select.c_str()) != 0)
+        return false;
+
+    MYSQL_RES* res = mysql_store_result(db);
+    if (!res)
+        return false;
+
+    MYSQL_ROW row = mysql_fetch_row(res);
+    if (!row)
+    {
+        mysql_free_result(res);
+        return false;
+    }
+
+    int deck[4];
+    for (int i = 0; i < 4; ++i)
+        deck[i] = atoi(row[i]);
+
+    mysql_free_result(res);
+
+    // 2. old / new 위치 찾기
+    int oldIdx = -1;
+    int newIdx = -1;
+
+    for (int i = 0; i < 4; ++i)
+    {
+        if (deck[i] == oldCard)
+            oldIdx = i;
+        if (deck[i] == newCard)
+            newIdx = i;
+    }
+
+    if (oldIdx == -1)
+        return false;
+
+    // 같은 카드 → 그대로 성공
+    if (oldCard == newCard)
+        return true;
+
+    // 3. 스왑 or 치환
+    if (newIdx != -1)
+    {
+        std::swap(deck[oldIdx], deck[newIdx]);
+    }
+    else
+    {
+        deck[oldIdx] = newCard;
+    }
+
+    // 4. DB 반영
+    std::string update =
+        "UPDATE user_magic SET "
+        "magic0=" + std::to_string(deck[0]) + ","
+        "magic1=" + std::to_string(deck[1]) + ","
+        "magic2=" + std::to_string(deck[2]) + ","
+        "magic3=" + std::to_string(deck[3]) +
+        " WHERE user_id='" + id + "'";
+
+    return mysql_query(db, update.c_str()) == 0;
 }
+
 
 bool UserManager::LoadUserProfile(const std::string& id, UserProfileData& out)
 {
     return LoadUserInfo(id, out.info) && LoadUserRank(id, out.rank);
 }
 
-// =================================================
-// Static tables
-// =================================================
+// 카드 및 랭크 테이블
 bool UserManager::LoadCardTable()
 {
     MYSQL* db = DBManager::Get();
@@ -327,9 +388,6 @@ const RankInfo* UserManager::GetRankInfo(int rank)
     return it == s_ranks.end() ? nullptr : &it->second;
 }
 
-// =================================================
-// Validation
-// =================================================
 bool UserManager::ValidateUser(const std::string& id)
 {
     UserInfoData info{};

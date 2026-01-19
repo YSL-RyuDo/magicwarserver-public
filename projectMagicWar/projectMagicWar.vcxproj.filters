@@ -51,9 +51,6 @@
     <ClCompile Include="IOCP_Defines.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="BufferBlock.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
     <ClCompile Include="BufferPool.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
@@ -76,6 +73,12 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="DBManager.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="DBWorker.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="DBWorkerInstance.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>
@@ -135,6 +138,12 @@
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="DBManager.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="DBWorker.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="DBWorkerInstance.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>

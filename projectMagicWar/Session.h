@@ -80,4 +80,5 @@ public:
 
     uint64_t slowEndTime = 0;
     uint64_t stunEndTime = 0;
+    uint64_t nextDotTickTime = 0;
 };

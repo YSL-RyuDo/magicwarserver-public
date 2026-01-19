@@ -3,7 +3,7 @@
 
 #pragma comment(lib, "ws2_32.lib")
 
-
+// 송신 데이터를 세션의 송신 큐에 넣고 최초 송신이면 비동기 전송을 시작하는 함수
 void IOCP_Send::EnqueueSend(Session* session, const char* data, size_t len)
 {
     if (session->closing) return;
@@ -18,6 +18,7 @@ void IOCP_Send::EnqueueSend(Session* session, const char* data, size_t len)
         PostSend(session);
 }
 
+// 송신 큐에서 하나의 메시지를 꺼내 WSASend로 비동기 송신을 등록하는 함수
 void IOCP_Send::PostSend(Session* session)
 {
     if (session->closing) return;
@@ -69,6 +70,7 @@ void IOCP_Send::PostSend(Session* session)
     }
 }
 
+// 송신 완료 후 사용한 자원을 반환하고 다음 송신이 있으면 이어서 처리하는 함수
 void IOCP_Send::SendCompletion(Session* session, OverlappedEx* ov)
 {
     bufPool->Release(ov->bufferPtr);

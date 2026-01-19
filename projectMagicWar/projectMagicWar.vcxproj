@@ -142,9 +142,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\Util\SHA256.cpp" />
-    <ClCompile Include="BufferBlock.cpp" />
     <ClCompile Include="BufferPool.cpp" />
     <ClCompile Include="DBManager.cpp" />
+    <ClCompile Include="DBWorker.cpp" />
+    <ClCompile Include="DBWorkerInstance.cpp" />
     <ClCompile Include="IOCP_Defines.cpp" />
     <ClCompile Include="IOCP_GameServer.cpp" />
     <ClCompile Include="IOCP_Recv.cpp" />
@@ -167,6 +168,8 @@
     <ClInclude Include="..\Util\SHA256.h" />
     <ClInclude Include="BufferPool.h" />
     <ClInclude Include="DBManager.h" />
+    <ClInclude Include="DBWorker.h" />
+    <ClInclude Include="DBWorkerInstance.h" />
     <ClInclude Include="IOCP_Defines.h" />
     <ClInclude Include="IOCP_GameServer.h" />
     <ClInclude Include="IOCP_Recv.h" />
