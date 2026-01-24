@@ -134,6 +134,9 @@ void PacketManager::HandlePacket(
 	case PKT_REQ_HP:
 	{
 		PKT_RES_HP_STRUCT pkt{};
+		strncpy_s(pkt.userId, sizeof(pkt.userId),
+			session->userId.c_str(), _TRUNCATE);
+
 		pkt.currentHp = session->currentHp;
 		pkt.maxHp = session->maxHp;
 
@@ -619,25 +622,19 @@ void PacketManager::HandleMove(Session* s, const char* body, int size)
 	);
 }
 
-
 // 공격 패킷을 처리하여 데미지와 상태 이상을 적용한다.
 void PacketManager::HandleHit(Session* attacker, const char* body, int bodySize)
 {
-	std::cout << "[HIT] 처리 시작\n";
-
 	constexpr int CARD_ICEBALL = 1;
 	constexpr int CARD_ELECTRICBALL = 2;
 	constexpr int CARD_ICEFIELDS = 3;
 	constexpr int CARD_POISON_MIST = 4;
 
-	if (bodySize != sizeof(PKT_HIT_STRUCT))
+	if (!attacker || bodySize != sizeof(PKT_HIT_STRUCT))
 		return;
 
 	PKT_HIT_STRUCT pkt{};
 	memcpy(&pkt, body, sizeof(pkt));
-
-	if (!attacker)
-		return;
 
 	if (attacker->userId != pkt.attackerId)
 		return;
@@ -650,10 +647,7 @@ void PacketManager::HandleHit(Session* attacker, const char* body, int bodySize)
 			target = it->second;
 	}
 
-	if (!target)
-		return;
-
-	if (attacker->userId == target->userId)
+	if (!target || attacker->userId == target->userId)
 		return;
 
 	if (!attacker->inBattle || !target->inBattle)
@@ -664,55 +658,34 @@ void PacketManager::HandleHit(Session* attacker, const char* body, int bodySize)
 
 	uint64_t now = GetTickCount64();
 
+	// DOT
 	if (pkt.cardId == CARD_POISON_MIST)
 	{
 		if (now < target->nextDotTickTime)
 			return;
 
 		target->nextDotTickTime = now + 1000;
-
-		int dotDamage = 5; // DB amount
-		target->currentHp -= dotDamage;
-
-		if (target->currentHp < 0)
-			target->currentHp = 0;
-
-		std::cout
-			<< "[DOT] PoisonMist tick "
-			<< target->userId
-			<< " dmg=" << dotDamage
-			<< " hp=" << target->currentHp
-			<< std::endl;
+		target->currentHp -= 5;
+		if (target->currentHp < 0) target->currentHp = 0;
 
 		SendHPResult(target);
 
 		if (target->currentHp <= 0)
 			HandleDie(attacker, target);
-
-		return; // ⭐ 반드시 종료
+		return;
 	}
 
+	// FIELD
 	if (pkt.cardId == CARD_ICEFIELDS)
 	{
-		float slowRatio = 0.4f;
-		int durationMs = 1000;
-
 		target->isSlowed = true;
-		target->slowRatio = slowRatio;
-		target->slowEndTime = now + durationMs;
-
-		SendSlow(target, slowRatio, durationMs);
-
-		std::cout
-			<< "[ICE FIELD SLOW] applied to "
-			<< target->userId
-			<< " ratio=" << slowRatio
-			<< " refresh=" << durationMs
-			<< std::endl;
-
-		return; // ⭐ 데미지 로직 차단
+		target->slowRatio = 0.4f;
+		target->slowEndTime = now + 1000;
+		SendSlow(target, 0.4f, 1000);
+		return;
 	}
 
+	// 일반 데미지
 	int dmg = pkt.damage;
 	if (dmg < 1) dmg = 1;
 	else if (dmg > 1000) dmg = 1000;
@@ -721,36 +694,27 @@ void PacketManager::HandleHit(Session* attacker, const char* body, int bodySize)
 	if (target->currentHp < 0)
 		target->currentHp = 0;
 
-	std::cout
-		<< "[HIT] "
-		<< attacker->userId << " -> "
-		<< target->userId
-		<< " card=" << pkt.cardId
-		<< " dmg=" << dmg
-		<< " hp=" << target->currentHp
-		<< std::endl;
-
-	// 상태 이상
 	if (pkt.cardId == CARD_ICEBALL)
 	{
-		float slowRatio = 0.5f;
-		int durationMs = 3000;
-
 		target->isSlowed = true;
-		target->slowRatio = slowRatio;
-		target->slowEndTime = now + durationMs;
-
-		SendSlow(target, slowRatio, durationMs);
+		target->slowRatio = 0.5f;
+		target->slowEndTime = now + 3000;
+		SendSlow(target, 0.5f, 3000);
 	}
 	else if (pkt.cardId == CARD_ELECTRICBALL)
 	{
-		int durationMs = 5000;
-
 		target->isStunned = true;
-		target->stunEndTime = now + durationMs;
-
-		SendStun(target, durationMs);
+		target->stunEndTime = now + 5000;
+		SendStun(target, 5000);
 	}
+
+	// ⭐ 투사체 제거
+	PKT_REMOVE_PROJECTILE_STRUCT rm{};
+	strncpy_s(rm.casterId, sizeof(rm.casterId),
+		attacker->userId.c_str(), _TRUNCATE);
+	rm.cardId = pkt.cardId;
+
+	SendPacket(target, PKT_REMOVE_PROJECTILE, &rm, sizeof(rm));
 
 	SendHPResult(attacker);
 	SendHPResult(target);
@@ -758,7 +722,6 @@ void PacketManager::HandleHit(Session* attacker, const char* body, int bodySize)
 	if (target->currentHp <= 0)
 		HandleDie(attacker, target);
 }
-
 
 // 전투 종료 시 승패 처리와 결과 전송 및 DB 갱신을 수행한다.
 void PacketManager::HandleDie(Session* winner, Session* loser)
@@ -887,7 +850,11 @@ void PacketManager::HandleCastFieldMagic(
 		_TRUNCATE
 	);
 
-	send.cardId = recv.cardId;
+	int fieldCardId = recv.cardId;
+	if (recv.cardId == 5)          // MeteorStrike
+		fieldCardId = 12;
+
+	send.cardId = fieldCardId;
 	send.localX = recv.localX;
 	send.localY = recv.localY;
 	send.attack = card->attack;
@@ -895,12 +862,8 @@ void PacketManager::HandleCastFieldMagic(
 	send.duration = card->duration;
 	send.amount = card->amount;
 
-	SendPacket(
-		s->battleOpponent,
-		PKT_SPAWN_FIELD_MAGIC,
-		&send,
-		sizeof(send)
-	);
+	//SendPacket(s, PKT_SPAWN_FIELD_MAGIC, &send, sizeof(send));
+	SendPacket(s->battleOpponent, PKT_SPAWN_FIELD_MAGIC, &send, sizeof(send));
 }
 
 
@@ -1001,11 +964,12 @@ void PacketManager::SendLoginAck(Session* s, uint16_t result)
 // 현재 HP 정보를 클라이언트로 전송한다.
 void PacketManager::SendHPResult(Session* s)
 {
-	std::cout << "[HP RESULT] 처리 시작\n";
-
 	if (!s) return;
 
 	PKT_RES_HP_STRUCT pkt{};
+	strncpy_s(pkt.userId, sizeof(pkt.userId),
+		s->userId.c_str(), _TRUNCATE);
+
 	pkt.currentHp = s->currentHp;
 	pkt.maxHp = s->maxHp;
 
@@ -1016,6 +980,7 @@ void PacketManager::SendHPResult(Session* s)
 		sizeof(pkt)
 	);
 }
+
 
 
 // 슬로우 상태 이상을 클라이언트에 적용한다.

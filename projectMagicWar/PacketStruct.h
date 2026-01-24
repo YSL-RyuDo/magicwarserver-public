@@ -117,9 +117,11 @@ struct PKT_MOVE_STRUCT
 
 struct PKT_RES_HP_STRUCT
 {
-    int32_t currentHp;
-    int32_t maxHp;
+    char userId[32];
+    int currentHp;
+    int maxHp;
 };
+
 
 struct PKT_HIT_STRUCT
 {
@@ -211,5 +213,12 @@ struct PKT_STATUS_STUN_STRUCT
     char targetId[32];
     int durationMs;
 };
+
+struct PKT_REMOVE_PROJECTILE_STRUCT
+{
+    char casterId[32];
+    int32_t cardId;
+};
+
 
 #pragma pack(pop)
