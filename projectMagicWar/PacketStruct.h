@@ -220,5 +220,15 @@ struct PKT_REMOVE_PROJECTILE_STRUCT
     int32_t cardId;
 };
 
+struct PKT_CAST_SELF_MAGIC_STRUCT
+{
+    int cardId; // 7 = Invisibility
+};
+
+struct PKT_STATUS_INVISIBILITY_STRUCT
+{
+    char userId[32];
+    int durationMs; // 0이면 해제
+};
 
 #pragma pack(pop)

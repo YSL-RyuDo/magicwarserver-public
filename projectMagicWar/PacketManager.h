@@ -50,7 +50,8 @@ private:
     static void HandleCastMagic(Session* s, const char* body, int size);
     static void HandleMagicDetailGAME(Session* s, const char* body, int bodySize);
     static void HandleCastFieldMagic(Session* s, const char* body, int bodySize);
-
+    static void HandleCastSelfMagic(Session* session,const char* body,int bodySize);
+    static void UpdateInvisibility(Session* session);
     static void SendSignupAck(Session* s, uint16_t result);
     static void SendLoginAck(Session* s, uint16_t result);
     static void SendHPResult(Session* s);

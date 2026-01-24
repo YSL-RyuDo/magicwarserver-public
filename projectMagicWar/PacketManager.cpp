@@ -160,6 +160,9 @@ void PacketManager::HandlePacket(
 	case PKT_CAST_FIELD_MAGIC:
 		HandleCastFieldMagic(session, body, bodySize);
 		break;
+	case PKT_CAST_SELF_MAGIC:
+		HandleCastSelfMagic(session, body, bodySize);
+		break;
 	case PKT_PING:
 		HandlePING(session);
 		break;
@@ -629,6 +632,7 @@ void PacketManager::HandleHit(Session* attacker, const char* body, int bodySize)
 	constexpr int CARD_ELECTRICBALL = 2;
 	constexpr int CARD_ICEFIELDS = 3;
 	constexpr int CARD_POISON_MIST = 4;
+	constexpr int CARD_VAMPIRIC_TOUCH = 6;
 
 	if (!attacker || bodySize != sizeof(PKT_HIT_STRUCT))
 		return;
@@ -708,7 +712,15 @@ void PacketManager::HandleHit(Session* attacker, const char* body, int bodySize)
 		SendStun(target, 5000);
 	}
 
-	// ⭐ 투사체 제거
+	if (pkt.cardId == CARD_VAMPIRIC_TOUCH)
+	{
+		const int HEAL_AMOUNT = 15;
+
+		attacker->currentHp += HEAL_AMOUNT;
+		if (attacker->currentHp > attacker->maxHp)
+			attacker->currentHp = attacker->maxHp;
+	}
+
 	PKT_REMOVE_PROJECTILE_STRUCT rm{};
 	strncpy_s(rm.casterId, sizeof(rm.casterId),
 		attacker->userId.c_str(), _TRUNCATE);
@@ -864,6 +876,186 @@ void PacketManager::HandleCastFieldMagic(
 
 	//SendPacket(s, PKT_SPAWN_FIELD_MAGIC, &send, sizeof(send));
 	SendPacket(s->battleOpponent, PKT_SPAWN_FIELD_MAGIC, &send, sizeof(send));
+}
+
+
+void PacketManager::HandleCastSelfMagic(Session* session,const char* body,int bodySize)
+{
+	if (!session || bodySize != sizeof(PKT_CAST_SELF_MAGIC_STRUCT))
+		return;
+
+	PKT_CAST_SELF_MAGIC_STRUCT pkt{};
+	memcpy(&pkt, body, sizeof(pkt));
+
+	uint64_t now = GetTickCount64();
+
+	// 1️ 은신 (cardId = 7)
+	if (pkt.cardId == 7)
+	{
+		// 이미 투명 상태면 중복 방지
+		if (session->isInvisible)
+			return;
+
+		session->isInvisible = true;
+		session->invisibleEndTime = now + 6000; // 6초
+
+		PKT_STATUS_INVISIBILITY_STRUCT notify{};
+		strncpy_s(
+			notify.userId,
+			sizeof(notify.userId),
+			session->userId.c_str(),
+			_TRUNCATE
+		);
+		notify.durationMs = 6000;
+
+		// 자기 자신
+		SendPacket(
+			session,
+			PKT_STATUS_INVISIBILITY,
+			&notify,
+			sizeof(notify)
+		);
+
+		// 상대방
+		if (session->battleOpponent)
+		{
+			SendPacket(
+				session->battleOpponent,
+				PKT_STATUS_INVISIBILITY,
+				&notify,
+				sizeof(notify)
+			);
+		}
+
+		std::cout << "[INVISIBILITY] "
+			<< session->userId
+			<< " is invisible for 6s\n";
+		return;
+	}
+
+	// 힐 (cardId = 8)
+	if (pkt.cardId == 8)
+	{
+		const int HEAL_AMOUNT = 30;
+
+		int oldHp = session->currentHp;
+
+		session->currentHp += HEAL_AMOUNT;
+		if (session->currentHp > session->maxHp)
+			session->currentHp = session->maxHp;
+
+		// 실제로 HP가 변했을 때만 전송
+		if (session->currentHp != oldHp)
+		{
+			PKT_RES_HP_STRUCT hpPkt{};
+			strncpy_s(
+				hpPkt.userId,
+				sizeof(hpPkt.userId),
+				session->userId.c_str(),
+				_TRUNCATE
+			);
+			hpPkt.currentHp = session->currentHp;
+			hpPkt.maxHp = session->maxHp;
+
+			// 자기 자신
+			SendPacket(
+				session,
+				PKT_RES_HP,
+				&hpPkt,
+				sizeof(hpPkt)
+			);
+
+			// 상대방에게도 HP 변화 전파
+			if (session->battleOpponent)
+			{
+				SendPacket(
+					session->battleOpponent,
+					PKT_RES_HP,
+					&hpPkt,
+					sizeof(hpPkt)
+				);
+			}
+		}
+
+		// 힐(cardId == 8) 처리 맨 아래에 추가
+		PKT_SPAWN_MAGIC_STRUCT fake{};
+		memset(&fake, 0, sizeof(fake));
+
+		strncpy_s(
+			fake.casterId,
+			sizeof(fake.casterId),
+			session->userId.c_str(),
+			_TRUNCATE
+		);
+
+		fake.cardId = 8;          // 힐 카드
+		fake.dirX = 0.f;
+		fake.dirY = 0.f;
+		fake.attack = 0;
+		fake.projectileSpeed = 0;
+
+		// 상대에게만 전송
+		if (session->battleOpponent)
+		{
+			SendPacket(
+				session->battleOpponent,
+				PKT_SPAWN_MAGIC,
+				&fake,
+				sizeof(fake)
+			);
+		}
+
+		std::cout << "[HEAL] "
+			<< session->userId
+			<< " +" << HEAL_AMOUNT
+			<< " HP (" << session->currentHp
+			<< "/" << session->maxHp << ")\n";
+		return;
+	}
+
+	// 그 외 Self Magic은 무시
+}
+
+
+void PacketManager::UpdateInvisibility(Session* session)
+{
+	if (!session || !session->isInvisible)
+		return;
+
+	uint64_t now = GetTickCount64();
+	if (now < session->invisibleEndTime)
+		return;
+
+	session->isInvisible = false;
+
+	PKT_STATUS_INVISIBILITY_STRUCT notify{};
+	strncpy_s(
+		notify.userId,
+		sizeof(notify.userId),
+		session->userId.c_str(),
+		_TRUNCATE
+	);
+	notify.durationMs = 0; // 해제
+
+	SendPacket(
+		session,
+		PKT_STATUS_INVISIBILITY,
+		&notify,
+		sizeof(notify)
+	);
+
+	if (session->battleOpponent)
+	{
+		SendPacket(
+			session->battleOpponent,
+			PKT_STATUS_INVISIBILITY,
+			&notify,
+			sizeof(notify)
+		);
+	}
+
+	std::cout << "[INVISIBILITY END] "
+		<< session->userId << "\n";
 }
 
 

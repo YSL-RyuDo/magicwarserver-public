@@ -81,4 +81,7 @@ public:
     uint64_t slowEndTime = 0;
     uint64_t stunEndTime = 0;
     uint64_t nextDotTickTime = 0;
+
+    bool isInvisible = false;
+    uint64_t invisibleEndTime = 0;
 };
