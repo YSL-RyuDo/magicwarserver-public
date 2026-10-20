@@ -1,44 +1,32 @@
-# Arcana Duel — IOCP Game Server
+# Arcana Duel — Server
 
 [English](README.md) · [Korean](README.ko.md) · [Japanese](README.ja.md)
 
-**C++ · IOCP · DB worker · Unity** · 開発記録
+プログラマー1名とグラフィック担当1名で制作した、マルチプレイヤー魔法バトルゲームです。
 
-[開発事例を見る](https://ysl-ryudo.github.io/ja/work/magicwar/) · [Portfolio](https://ysl-ryudo.github.io/ja/)
+**C++ · IOCP · DB worker · Unity** · 開発記録
 
 **2025.08 - 2026.02 · 2名：プログラマー1名、グラフィック1名**
 
 プログラミング担当：C++サーバー・Unityゲーム連携
 
+[開発事例を見る](https://ysl-ryudo.github.io/ja/work/magicwar/) · [Portfolio](https://ysl-ryudo.github.io/ja/)
 
-マルチプレイヤー魔法戦闘向けのC++ Windows IOCPサーバーです。
+[magicwarserver](https://github.com/YSL-RyuDo/magicwarserver) (非公開・アクセス権が必要) · [magicwar](https://github.com/YSL-RyuDo/magicwar) (非公開・アクセス権が必要)
 
-## 取り組んだ課題
+## システム別の担当内容
 
-マルチプレイヤー魔法戦闘では送受信、再利用する接続リソース、DBを使うゲームサービスが共存します。サーバー内の責務の分け方を示す事例です。
+| 領域 | 実装 |
+|---|---|
+| ネットワーク処理 | 接続受付・IOCPワーカーによる送受信完了処理 |
+| リソース寿命 | セッション・バッファー・Overlapped I/Oのプール |
+| DB処理 | 専用DBワーカーでデータベース要求を処理 |
+| ゲーム連携 | 魔法・クールダウン・試合・プロフィール・ランクとUnityを連携 |
 
-## 担当した実装と設計
-
-IOCPワーカー、セッション・バッファー・Overlappedプール、独立したDBワーカーを構成しました。魔法・クールダウン、試合・プロフィール・ランク、Unityとの連携を担当しました。
-
-### 実装概要 · 概念フロー
-
-```mermaid
-flowchart LR
-    N0["Unity client"] --> N1
-    N1["IOCP workers / pools"] --> N2
-    N2["Game services"] --> N3
-    N3["DB worker"]
-```
-
-### 開発デモ動画
-
-[![Arcana Duel — Arcana Duel](https://i.ytimg.com/vi/MJo1y09kzd4/hqdefault.jpg)](https://www.youtube.com/watch?v=MJo1y09kzd4)
+## 開発デモ動画
 
 - [Arcana Duel](https://www.youtube.com/watch?v=MJo1y09kzd4)
 - [Early development demo](https://www.youtube.com/watch?v=8sKpA2H9Ib4)
-
-撮影時点のプロジェクトデモです。ゲーム内での担当作業は以下の担当範囲で示します。
 
 ## 担当した内容
 
@@ -62,7 +50,3 @@ Windows C++ワークロードを備えたVisual Studioで[projectMagicWar.sln](p
 ## 開発・検証範囲
 
 過去の実装で、実測同時接続容量は主張しません。起動コードにローカルDB設定があるため、実行前に隔離された開発環境に合わせて確認してください。プール容量を検証済みプレイヤー数と解釈しないでください。
-
-## 実装の確認方法
-
-IOCP_GameServer.cppと対応するクライアント履歴を併せて確認できます。プールサイズは設定値であり、実測した同時接続数ではありません。
