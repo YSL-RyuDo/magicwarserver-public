@@ -179,4 +179,4 @@ Open [projectMagicWar.sln](projectMagicWar.sln) in Visual Studio with the Window
 
 [magicwarserver](https://github.com/YSL-RyuDo/magicwarserver-public), Public source
 
-[magicwar](https://github.com/YSL-RyuDo/magicwar), Public source
+[magicwar](https://github.com/YSL-RyuDo/magicwar), Public repository

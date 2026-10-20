@@ -181,4 +181,4 @@ Windows C++ワークロードを備えたVisual Studioで[projectMagicWar.sln](p
 
 [magicwarserver](https://github.com/YSL-RyuDo/magicwarserver-public), 公開ソース
 
-[magicwar](https://github.com/YSL-RyuDo/magicwar), 公開ソース
+[magicwar](https://github.com/YSL-RyuDo/magicwar), 公開リポジトリ

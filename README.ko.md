@@ -179,4 +179,4 @@ Windows C++ 워크로드가 설치된 Visual Studio에서 [projectMagicWar.sln](
 
 [magicwarserver](https://github.com/YSL-RyuDo/magicwarserver-public), 공개 소스
 
-[magicwar](https://github.com/YSL-RyuDo/magicwar), 공개 소스
+[magicwar](https://github.com/YSL-RyuDo/magicwar), 공개 저장소
