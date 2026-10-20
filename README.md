@@ -9,13 +9,59 @@ A multiplayer magic-combat game, built by one programmer and one graphics teamma
 | Status | Development archive |
 | Stack | C++, IOCP, DB worker, Unity |
 | Period and team | Aug 2025 ~ Feb 2026, 2 members: 1 programmer, 1 graphics |
-| My role | Programming: C++ server & Unity game integration |
+| My role | Programming: Unity gameplay and C++ server |
 
 [Explore the case](https://ysl-ryudo.github.io/en/work/magicwar/), [Portfolio](https://ysl-ryudo.github.io/en/)
 
 [![Arcana Duel](https://i.ytimg.com/vi/MJo1y09kzd4/hqdefault.jpg)](https://www.youtube.com/watch?v=MJo1y09kzd4)
 
 [Arcana Duel](https://www.youtube.com/watch?v=MJo1y09kzd4), [Early development demo](https://www.youtube.com/watch?v=8sKpA2H9Ib4)
+
+## What I built across the game
+
+I implemented the game's main programming flow on both Unity and C++: deck setup, character control, spell behavior, network services and match results. Art and audio assets retain their creators' credits; shared audio/UI changes and the separately authored credits screen are not presented as my sole work.
+
+**Player flow**
+
+Login → lobby and deck editing → matching and loading → movement and spell combat → victory or defeat → lobby
+
+Source links pin the inspected revision; contribution links identify my non-merge changes. Shared-file links do not imply sole authorship. Private source requires repository access.
+
+### Account, lobby and matching
+
+Implemented login and lobby service/UI connections, loading and matching cancellation, and the transition into gameplay. Network responses drive scene-facing state so the game flow includes entering and leaving a match, not only exchanging combat packets.
+
+[LoginService.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Login/LoginService.cs), [My change c507717](https://github.com/YSL-RyuDo/magicwar/commit/c5077172f80d9908725b1f1668f4598bb3cdd62b), [LobbyService.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Lobby/LobbyService.cs), [My change c507717](https://github.com/YSL-RyuDo/magicwar/commit/c5077172f80d9908725b1f1668f4598bb3cdd62b), [LoadingSystem.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Loading/LoadingSystem.cs), [My change c507717](https://github.com/YSL-RyuDo/magicwar/commit/c5077172f80d9908725b1f1668f4598bb3cdd62b)
+
+### Four-slot spell deck
+
+Implemented card selection, detail display and replacement of an equipped slot. SettingSystem separates the pending card from the equipped deck and requests the deck again after a successful change. Card assets provide local presentation while runtime card data supplies gameplay values.
+
+[SettingSystem.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Setting/SettingSystem.cs), [My change d14efd6](https://github.com/YSL-RyuDo/magicwar/commit/d14efd652cede62088b9bbebdc6de8534b072340), [CardStatManager.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Setting/CardStatManager.cs), [My change 500313d](https://github.com/YSL-RyuDo/magicwar/commit/500313d0294b2d3aca4166f540c7a3bfab1b6c53)
+
+### Spell casting and concrete effects
+
+Implemented input and cooldown handling, projectile spawning and field-type spell routing. The game includes fire, ice and electric projectiles, poison and ice areas, meteor impacts, healing, barriers, invisibility and blink. MagicCaster connects the selected card, runtime values, animation and spawned spell behavior.
+
+[MagicCaster.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Magic/MagicCaster.cs), [My change a64178a](https://github.com/YSL-RyuDo/magicwar/commit/a64178ace62939442e4a7cb727b7bc2f04663230), [GameManager.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Game/GameManager.cs), [My change 2f2abc5](https://github.com/YSL-RyuDo/magicwar/commit/2f2abc5397d4bc8981d862c7a6e8f117cb11138a)
+
+### Movement, status effects and remote actors
+
+Implemented local movement and animation with slow, stun and casting restrictions, and remote actor updates for movement, attacks, damage and death. Some effects include local prediction or presentation; this implementation should not be described as fully server-authoritative movement.
+
+[CharacterController2D.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Player/CharacterController2D.cs), [My change a6f8138](https://github.com/YSL-RyuDo/magicwar/commit/a6f81385bb004f7ddae57ac3ea8c29bddd604b9b), [EnemyService.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Enemy/EnemyService.cs), [My change 2f2abc5](https://github.com/YSL-RyuDo/magicwar/commit/2f2abc5397d4bc8981d862c7a6e8f117cb11138a)
+
+### Combat HUD and match closure
+
+Implemented health and spell-cooldown UI, victory/defeat display and return to the lobby. These screens consume combat and result state; the server also maintains match, profile and rank-related processing.
+
+[GameUIController.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Game/GameUIController.cs), [My change 2f2abc5](https://github.com/YSL-RyuDo/magicwar/commit/2f2abc5397d4bc8981d862c7a6e8f117cb11138a), [MatchManager.cpp (main)](https://github.com/YSL-RyuDo/magicwarserver/blob/54d5e47c5121c31c945aaec206d7e5d4644c9789/projectMagicWar/MatchManager.cpp), [My change 5007ff1](https://github.com/YSL-RyuDo/magicwarserver/commit/5007ff1c1c2f0ed204843307d3b3a9c7b8091381)
+
+### Network transport and persistence
+
+Built the IOCP server's message framing, session resources and separate database worker. The detailed notes explain why TCP message reconstruction and storage waiting are separate concerns from the gameplay code that consumes their results.
+
+[PacketParser.cpp (main)](https://github.com/YSL-RyuDo/magicwarserver/blob/54d5e47c5121c31c945aaec206d7e5d4644c9789/projectMagicWar/PacketParser.cpp), [My change 5007ff1](https://github.com/YSL-RyuDo/magicwarserver/commit/5007ff1c1c2f0ed204843307d3b3a9c7b8091381), [DBWorker.cpp (main)](https://github.com/YSL-RyuDo/magicwarserver/blob/54d5e47c5121c31c945aaec206d7e5d4644c9789/projectMagicWar/DBWorker.cpp), [My change 5007ff1](https://github.com/YSL-RyuDo/magicwarserver/commit/5007ff1c1c2f0ed204843307d3b3a9c7b8091381)
 
 ## My contribution
 
@@ -38,13 +84,6 @@ Commits are evidence of the stated changes, not a percentage-of-authorship score
 Multiplayer magic combat combines receive/send handling, reusable connection resources and database-backed game services. Those responsibilities should be readable as separate parts of the server.
 
 The server uses IOCP workers, session/buffer/overlapped pools and a separate DB worker. My work includes magic/cooldown services, matches, profiles and ranks, with Unity-side game/network integration.
-
-| Area | Implementation |
-|---|---|
-| Network work | Accept connections; complete receives and sends through IOCP workers |
-| Resource lifetime | Reusable session, buffer and overlapped-I/O pools |
-| Database work | Database requests handled by a separate DB worker |
-| Game integration | Magic, cooldowns, matches, profiles and ranks paired with Unity |
 
 ## How the code works and why it is structured this way
 
@@ -89,6 +128,46 @@ Delimiter-based messages are easy to inspect but require escaping rules for arbi
 The extra layer requires careful length, capacity and lifetime rules. Pool capacity is an allocation setting, not a demonstrated concurrent-player count. Useful validation includes split headers, split bodies, multiple messages in one receive and disconnects with pending I/O.
 
 [magicwarserver/PacketParser.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/PacketParser.cpp), [magicwarserver/IOCP_Recv.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/IOCP_Recv.cpp)
+
+### A spell needs both content and runtime values
+
+**Implementation**
+
+MagicCaster looks up a local CardData prefab and server-fed CardRuntimeData before casting. It uses IFieldMagic to choose field placement or projectile launch, with an explicit meteor exception, and copies the relevant runtime values into the spawned spell.
+
+**Design rationale**
+
+Art/prefab identity and combat parameters change for different reasons. Separating them lets local content define appearance while runtime data supplies damage, speed, radius and duration. Initializing an instance with values also makes its behavior explicit when it is spawned.
+
+**Alternatives and the current tradeoff**
+
+Putting every value in the prefab minimizes lookups but duplicates balance data. One central switch for every spell keeps routing visible but grows with spell-specific behavior. The current design shares initialization through MagicProjectile and marks field behavior with an interface, while retaining some special cases.
+
+**Tradeoffs and verification**
+
+Card IDs, prefabs and runtime records must stay compatible. The meteor ID exception and required prefab components are coupling points worth testing. Receiving values from a server does not by itself prove that all hits or movement are validated there.
+
+[magicwar/MagicCaster.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Magic/MagicCaster.cs), [magicwar/CardStatManager.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Setting/CardStatManager.cs)
+
+### Replacing a card is a request, not a local fact
+
+**Implementation**
+
+SettingSystem holds a pending card ID while the player selects an equipped slot. It sends the old and new card IDs, clears selection mode, and requests the equipped deck again only when the replacement response reports success.
+
+**Design rationale**
+
+The UI's intended change and the server's stored deck can differ when a request fails. Refreshing from the accepted state avoids treating a click as confirmation and reuses the same deck-to-UI path used on entry.
+
+**Alternatives and the current tradeoff**
+
+An optimistic local swap feels immediate but needs rollback. Returning the full updated deck in the replacement response would avoid a second round trip. The current requery is simpler to reuse but adds a request and a period of waiting.
+
+**Tradeoffs and verification**
+
+The inspected code derives the old card from its displayed sprite and logs unsuccessful changes. Explicit slot identity, pending-state feedback and timeout behavior would make that contract clearer. The current implementation should not be described as complete failure recovery.
+
+[magicwar/SettingSystem.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Setting/SettingSystem.cs)
 
 ## Open and inspect
 
