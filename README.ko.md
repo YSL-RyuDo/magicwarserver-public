@@ -2,7 +2,38 @@
 
 [English](README.md) · [Korean](README.ko.md) · [Japanese](README.ja.md)
 
+**C++ · IOCP · DB worker · Unity** · 개발 기록
+
+[개발 사례 보기](https://ysl-ryudo.github.io/ko/work/magicwar/) · [Portfolio](https://ysl-ryudo.github.io/ko/)
+
+
 멀티플레이 마법 전투를 위한 C++ Windows IOCP 서버입니다.
+
+## 해결하려던 문제
+
+멀티플레이 마법 전투에서는 송수신 처리, 재사용할 연결 자원과 DB를 사용하는 게임 서비스가 함께 동작합니다. 서버에서 각 책임이 어떻게 나뉘는지 보여주는 사례입니다.
+
+## 내 구현과 설계
+
+IOCP 워커, 세션·버퍼·Overlapped 풀과 별도 DB 워커를 구성했습니다. 마법·쿨다운 서비스, 경기·프로필·랭크와 Unity 게임·네트워크 연동을 작업했습니다.
+
+### 구현 개요 · 개념 흐름도
+
+```mermaid
+flowchart LR
+    N0["Unity client"] --> N1
+    N1["IOCP workers / pools"] --> N2
+    N2["Game services"] --> N3
+    N3["DB worker"]
+```
+
+### 개발 시연 영상
+
+[![Magicwar — Magicwar demo](https://i.ytimg.com/vi/8sKpA2H9Ib4/hqdefault.jpg)](https://www.youtube.com/watch?v=8sKpA2H9Ib4)
+
+- [Magicwar demo](https://www.youtube.com/watch?v=8sKpA2H9Ib4)
+
+촬영 당시의 프로젝트 시연입니다. 게임 안에서 제가 맡은 작업은 아래 기여 항목으로 구분합니다.
 
 ## 내 기여
 
@@ -26,3 +57,7 @@ Windows C++ 워크로드가 설치된 Visual Studio에서 [projectMagicWar.sln](
 ## 개발·검증 범위
 
 과거 구현이며 측정된 동시 접속 수용량은 주장하지 않습니다. 시작 코드에 로컬 DB 설정이 있으므로 실행 전에 격리된 개발 환경에 맞게 확인해야 합니다. 풀 용량 설정을 검증된 플레이어 수로 해석하지 않습니다.
+
+## 구현을 확인하는 방법
+
+IOCP_GameServer.cpp와 대응 클라이언트 이력을 함께 확인할 수 있습니다. 풀 크기는 설정값이며 측정된 동시 접속 수는 아닙니다.

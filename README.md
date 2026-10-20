@@ -2,7 +2,38 @@
 
 [English](README.md) · [Korean](README.ko.md) · [Japanese](README.ja.md)
 
+**C++ · IOCP · DB worker · Unity** · Development archive
+
+[Explore the case](https://ysl-ryudo.github.io/en/work/magicwar/) · [Portfolio](https://ysl-ryudo.github.io/en/)
+
+
 A C++ Windows IOCP server for multiplayer magic combat.
+
+## The engineering problem
+
+Multiplayer magic combat combines receive/send handling, reusable connection resources and database-backed game services. Those responsibilities should be readable as separate parts of the server.
+
+## My implementation
+
+The server uses IOCP workers, session/buffer/overlapped pools and a separate DB worker. My work includes magic/cooldown services, matches, profiles and ranks, with Unity-side game/network integration.
+
+### Implementation overview · conceptual flow
+
+```mermaid
+flowchart LR
+    N0["Unity client"] --> N1
+    N1["IOCP workers / pools"] --> N2
+    N2["Game services"] --> N3
+    N3["DB worker"]
+```
+
+### Development videos
+
+[![Magicwar — Magicwar demo](https://i.ytimg.com/vi/8sKpA2H9Ib4/hqdefault.jpg)](https://www.youtube.com/watch?v=8sKpA2H9Ib4)
+
+- [Magicwar demo](https://www.youtube.com/watch?v=8sKpA2H9Ib4)
+
+Recorded project demonstrations; the contribution section below identifies my work within the game.
 
 ## My contribution
 
@@ -26,3 +57,7 @@ Open [projectMagicWar.sln](projectMagicWar.sln) in Visual Studio with the Window
 ## Development and verification scope
 
 Historical implementation; no measured concurrent-user capacity is claimed. The checked-in startup code contains local database configuration: review and supply an appropriate isolated development configuration before running. Pool capacities are implementation settings, not demonstrated player counts.
+
+## How to evaluate the work
+
+Inspect IOCP_GameServer.cpp and the companion client history. Pool sizes are configuration values, not measured concurrency capacity.
