@@ -1,10 +1,14 @@
-# Magicwar — IOCP Game Server
+# Arcana Duel — IOCP Game Server
 
 [English](README.md) · [Korean](README.ko.md) · [Japanese](README.ja.md)
 
 **C++ · IOCP · DB worker · Unity** · 開発記録
 
 [開発事例を見る](https://ysl-ryudo.github.io/ja/work/magicwar/) · [Portfolio](https://ysl-ryudo.github.io/ja/)
+
+**2025.08 - 2026.02 · 2名：プログラマー1名、グラフィック1名**
+
+プログラミング担当：C++サーバー・Unityゲーム連携
 
 
 マルチプレイヤー魔法戦闘向けのC++ Windows IOCPサーバーです。
@@ -29,9 +33,10 @@ flowchart LR
 
 ### 開発デモ動画
 
-[![Magicwar — Magicwar demo](https://i.ytimg.com/vi/8sKpA2H9Ib4/hqdefault.jpg)](https://www.youtube.com/watch?v=8sKpA2H9Ib4)
+[![Arcana Duel — Arcana Duel](https://i.ytimg.com/vi/MJo1y09kzd4/hqdefault.jpg)](https://www.youtube.com/watch?v=MJo1y09kzd4)
 
-- [Magicwar demo](https://www.youtube.com/watch?v=8sKpA2H9Ib4)
+- [Arcana Duel](https://www.youtube.com/watch?v=MJo1y09kzd4)
+- [Early development demo](https://www.youtube.com/watch?v=8sKpA2H9Ib4)
 
 撮影時点のプロジェクトデモです。ゲーム内での担当作業は以下の担当範囲で示します。
 
