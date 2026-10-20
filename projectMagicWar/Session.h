@@ -1,9 +1,12 @@
-#pragma once
+﻿#pragma once
 #include <winsock2.h>
 #include <string>
 #include <queue>
 #include <atomic>
 #include <mutex>
+#include <vector>
+#include <chrono>
+#include <cstdint>
 
 #include "IOCP_Defines.h"
 
@@ -20,6 +23,9 @@ public:
 
     void Reset()
     {
+        std::lock_guard<std::recursive_mutex> lock(stateMtx);
+        ++generation;
+        loginPending = false;
         sock = INVALID_SOCKET;
         sessionId = 0;
 
@@ -41,6 +47,9 @@ public:
     }
 
 public:
+    std::recursive_mutex stateMtx;
+    uint64_t generation = 0;
+    bool loginPending = false;
     SOCKET sock;
     uint64_t sessionId;
     uint32_t roomId = 0;

@@ -1,0 +1,16 @@
+.vs/
+**/Debug/
+**/Release/
+**/x64/
+**/x86/
+**/Win32/
+**/projectMagicWar/tlog/
+build/
+__pycache__/
+*.user
+*.obj
+*.pdb
+*.ilk
+*.exe
+*.dll
+*.log

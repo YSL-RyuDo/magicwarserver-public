@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <unordered_map>
 #include <string>
 #include<mutex>
@@ -33,6 +33,7 @@ public:
         uint16_t dataSize);
 
     static void HandleSessionDisconnect(Session* session);
+    static void StopDelayedResults();
 
 private:
     static void HandlePING(Session* s);

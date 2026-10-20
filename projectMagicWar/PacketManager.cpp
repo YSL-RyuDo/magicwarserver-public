@@ -6,6 +6,8 @@
 #include "MatchManager.h"
 #include "PacketStruct.h"
 #include "DBWorkerInstance.h"
+#include "SessionDB.h"
+#include "DelayedTasks.h"
 
 #include <iostream>
 #include <random>
@@ -18,6 +20,9 @@ std::unordered_map<std::string, Session*>* PacketManager::s_userMap = nullptr;
 MatchManager* PacketManager::s_matchMgr = nullptr;
 IOCP_Send* PacketManager::s_sendProc = nullptr;
 std::mutex PacketManager::s_userMapMtx;
+namespace { DelayedTasks resultTasks; }
+
+void PacketManager::StopDelayedResults() { resultTasks.Stop(); }
 
 // 로그인 성공 시 세션에서 사용할 랜덤 토큰을 생성한다.
 static uint32_t GenerateRandomToken()
@@ -26,7 +31,7 @@ static uint32_t GenerateRandomToken()
 
 	std::random_device rd;
 	std::mt19937 gen(rd());
-	std::uniform_int_distribution<uint32_t> dis;
+	std::uniform_int_distribution<uint32_t> dis(1, UINT32_MAX);
 	return dis(gen);
 }
 
@@ -38,6 +43,7 @@ void PacketManager::Init(
 {
 	std::cout << "[INIT] PacketManager 초기화 시작\n";
 
+    resultTasks.Start();
 	s_userMap = userMap;
 	s_matchMgr = matchMgr;
 	s_sendProc = sendProc;
@@ -53,8 +59,9 @@ void PacketManager::HandlePacket(
 {
 	std::cout << "[PACKET] HandlePacket 시작\n";
 
-	if (!session || session->closing)
-		return;
+	if (!session) return;
+	std::lock_guard<std::recursive_mutex> stateLock(session->stateMtx);
+	if (session->closing) return;
 
 	bool authFree =
 		packetId == PKT_LOGIN ||
@@ -208,7 +215,7 @@ void PacketManager::SendPacket(
 
 	std::vector<char> buf(sizeof(PACKET_HEADER) + dataSize);
 	memcpy(buf.data(), &header, sizeof(header));
-	memcpy(buf.data() + sizeof(header), data, dataSize);
+	if (dataSize) memcpy(buf.data() + sizeof(header), data, dataSize);
 
 	s_sendProc->EnqueueSend(session, buf.data(), (int)buf.size());
 }
@@ -216,211 +223,134 @@ void PacketManager::SendPacket(
 // 세션 종료 시 유저 정보를 정리하고 유저 맵에서 제거한다.
 void PacketManager::HandleSessionDisconnect(Session* s)
 {
-	std::cout << "[DISCONNECT] HandleSessionDisconnect 시작\n";
 
-	if (!s) return;
-
-	if (!s->userId.empty())
-	{
-		UserManager::LogoutUser(s->userId);
-
-		std::lock_guard<std::mutex> lock(s_userMapMtx);
-		s_userMap->erase(s->userId);
-	}
-
-	s->closing = true;
+    if (!s) return;
+    std::lock_guard<std::recursive_mutex> stateLock(s->stateMtx);
+    s->closing = true;
+    s->loginPending = false;
+    if (!s->userId.empty())
+    {
+        std::lock_guard<std::mutex> lock(s_userMapMtx);
+        auto it = s_userMap->find(s->userId);
+        if (it != s_userMap->end() && it->second == s)
+        {
+            s_userMap->erase(it);
+            UserManager::LogoutUser(s->userId);
+        }
+    }
+    s->authenticated = false;
 }
 
 // 회원가입 요청을 처리하고 신규 계정을 생성한다.
 void PacketManager::HandleSignup(Session* s, const char* body, int size)
 {
-	std::cout << "[SIGNUP] 처리 시작\n";
 
-	std::cout << "[SIGNUP] HandleSignup 진입 size=" << size << "\n";
-
-	if (size != sizeof(PKT_SIGNUP_REQ))
-	{
-		std::cout << "[SIGNUP] size 불일치\n";
-		return;
-	}
-
-	PKT_SIGNUP_REQ req{};
-	memcpy(&req, body, sizeof(req));
-
-	std::string id(req.id);
-	std::string pw(req.pw);
-	std::string nick(req.nick);
-
-	std::cout << "[SIGNUP] 요청 id=" << id << " nick=" << nick << "\n";
-
-	if (UserManager::IsIDExist(id))
-	{
-		std::cout << "[SIGNUP] ID 이미 존재\n";
-		SendSignupAck(s, PKT_SIGNUP_ID_EXISTS);
-		return;
-	}
-
-	if (UserManager::IsNickExist(nick))
-	{
-		std::cout << "[SIGNUP] Nick 이미 존재\n";
-		SendSignupAck(s, PKT_SIGNUP_NICK_EXISTS);
-		return;
-	}
-
-	std::string salt = PasswordHasher::GenerateSalt(16);
-	std::string hash = PasswordHasher::Hash(pw, salt);
-
-	UserManager::AddUser(id, hash, salt, nick);
-
-	std::cout << "[SIGNUP] 성공\n";
-	SendSignupAck(s, PKT_SIGNUP_OK);
+    if (size != sizeof(PKT_SIGNUP_REQ)) { s->closing = true; return; }
+    PKT_SIGNUP_REQ req{};
+    memcpy(&req, body, sizeof(req));
+    if (!memchr(req.id, 0, sizeof(req.id)) ||
+        !memchr(req.pw, 0, sizeof(req.pw)) ||
+        !memchr(req.nick, 0, sizeof(req.nick)))
+    { s->closing = true; return; }
+    const std::string id(req.id), pw(req.pw), nick(req.nick);
+    if (id.empty() || pw.empty() || nick.empty()) { s->closing = true; return; }
+    if (!EnqueueSessionDB(s, [id, pw, nick]() -> SessionDBCompletion {
+        uint16_t result = PKT_SIGNUP_OK;
+        if (UserManager::IsIDExist(id)) result = PKT_SIGNUP_ID_EXISTS;
+        else if (UserManager::IsNickExist(nick)) result = PKT_SIGNUP_NICK_EXISTS;
+        else
+        {
+            const auto salt = PasswordHasher::GenerateSalt(16);
+            if (!UserManager::AddUser(id, PasswordHasher::Hash(pw, salt), salt, nick))
+                return [](Session& session) { session.closing = true; };
+        }
+        return [result](Session& session) { SendSignupAck(&session, result); };
+    })) s->closing = true;
 }
 
 
 // 로그인 요청을 처리하고 세션 인증 상태를 설정한다.
 void PacketManager::HandleLogin(Session* s, const char* body, int size)
 {
-	std::cout << "[LOGIN] 처리 시작\n";
 
-	std::cout << "[LOGIN] HandleLogin 진입 size=" << size << "\n";
-
-	if (size != sizeof(PKT_LOGIN_REQ))
-	{
-		std::cout << "[LOGIN] size 불일치\n";
-		return;
-	}
-
-	PKT_LOGIN_REQ req{};
-	memcpy(&req, body, sizeof(req));
-
-	std::string id(req.id);
-	std::string pw(req.pw);
-	std::string nick;
-
-	std::cout << "[LOGIN] 로그인 시도 id=" << id << "\n";
-
-	if (!UserManager::CheckLogin(id, pw, nick))
-	{
-		std::cout << "[LOGIN] 비밀번호 불일치 또는 ID 없음\n";
-		SendLoginAck(s, PKT_LOGIN_PW_FAIL);
-		return;
-	}
-
-	if (!UserManager::TryLoginUser(id))
-	{
-		std::cout << "[LOGIN] 이미 로그인 상태\n";
-		SendLoginAck(s, PKT_LOGIN_ALREADY);
-		return;
-	}
-
-	s->userId = id;
-	s->nickname = nick;
-	s->authenticated = true;
-	s->token = GenerateRandomToken();
-
-	{
-		std::lock_guard<std::mutex> lock(s_userMapMtx);
-		(*s_userMap)[id] = s;
-	}
-
-	PKT_LOGIN_ACK_STRUCT ack{};
-	ack.result = PKT_LOGIN_OK;
-	ack.token = s->token;
-	strncpy_s(ack.nick, nick.c_str(), 31);
-
-	std::cout << "[LOGIN] ACK 전송 token=" << s->token << "\n";
-	SendPacket(s, PKT_LOGIN_OK, &ack, sizeof(ack));
-
-	std::cout << "[LOGIN] 완료 user=" << id << "\n";
+    if (s->authenticated || s->loginPending)
+    {
+        SendLoginAck(s, PKT_LOGIN_ALREADY);
+        return;
+    }
+    if (size != sizeof(PKT_LOGIN_REQ)) { s->closing = true; return; }
+    PKT_LOGIN_REQ req{};
+    memcpy(&req, body, sizeof(req));
+    if (!memchr(req.id, 0, sizeof(req.id)) || !memchr(req.pw, 0, sizeof(req.pw)))
+    { s->closing = true; return; }
+    const std::string id(req.id), pw(req.pw);
+    s->loginPending = true;
+    if (!EnqueueSessionDB(s, [id, pw]() -> SessionDBCompletion {
+        std::string nick;
+        const bool valid = UserManager::CheckLogin(id, pw, nick);
+        return [id, nick, valid](Session& session) {
+            session.loginPending = false;
+            if (!valid) { SendLoginAck(&session, PKT_LOGIN_PW_FAIL); return; }
+            // Reserve only when applying to a still-live connection.
+            const auto token = GenerateRandomToken();
+            if (!UserManager::TryLoginUser(id))
+            { SendLoginAck(&session, PKT_LOGIN_ALREADY); return; }
+            session.userId = id;
+            session.nickname = nick;
+            session.authenticated = true;
+            session.token = token;
+            {
+                std::lock_guard<std::mutex> lock(s_userMapMtx);
+                (*s_userMap)[id] = &session;
+            }
+            PKT_LOGIN_ACK_STRUCT ack{};
+            ack.result = PKT_LOGIN_OK;
+            ack.token = token;
+            strncpy_s(ack.nick, nick.c_str(), 31);
+            SendPacket(&session, PKT_LOGIN_OK, &ack, sizeof(ack));
+        };
+    })) { s->loginPending = false; s->closing = true; }
 }
 
 
 // 유저 프로필 정보를 조회하여 클라이언트로 전달한다.
 void PacketManager::HandleProfileRequest(Session* s, const char* body, int bodySize)
 {
-	std::cout << "[PROFILE] 처리 시작\n";
 
-	std::cout << "[PROFILE] 요청 수신 bodySize=" << bodySize << "\n";
-
-	if (!s)
-	{
-		std::cout << "[PROFILE] 세션 없음\n";
-		return;
-	}
-
-	if (bodySize != 32)
-	{
-		std::cout << "[PROFILE] bodySize 오류\n";
-		return;
-	}
-
-	char idBuf[33]{};
-	memcpy(idBuf, body, 32);
-	std::string userId(idBuf);
-
-	std::cout << "[PROFILE] 요청 userId=" << userId << "\n";
-
-	UserProfileData userProfile{};
-	if (!UserManager::LoadUserProfile(userId, userProfile))
-	{
-		std::cout << "[PROFILE] 프로필 로드 실패\n";
-		return;
-	}
-
-	const UserInfoData& info = userProfile.info;
-	const UserRankData& rankData = userProfile.rank;
-
-	const RankInfo* rankInfo = UserManager::GetRankInfo(rankData.rank);
-	if (!rankInfo)
-	{
-		std::cout << "[PROFILE] RankInfo 조회 실패 rank="
-			<< rankData.rank << "\n";
-		return;
-	}
-
-	PKT_RES_PROFILE_DATA pkt{};
-
-	memcpy(
-		pkt.nickname,
-		s->nickname.c_str(),
-		std::min<size_t>(31, s->nickname.size())
-	);
-
-	pkt.level = info.level;
-	pkt.exp = info.exp;
-	pkt.rank = rankData.rank;
-	pkt.rankScore = rankData.rankScore;
-
-	memcpy(
-		pkt.rankName,
-		rankInfo->name.c_str(),
-		std::min<size_t>(15, rankInfo->name.size())
-	);
-
-	pkt.minScore = rankInfo->minScore;
-	pkt.maxScore = rankInfo->maxScore;
-
-	std::cout << "[PROFILE] 프로필 패킷 전송\n";
-	SendPacket(s, PKT_RES_PROFILE, &pkt, sizeof(pkt));
+    if (bodySize != 32) { s->closing = true; return; }
+    char id[33]{};
+    memcpy(id, body, 32);
+    // This protocol returns the authenticated user's nickname and profile.
+    if (s->userId != id) { s->closing = true; return; }
+    const auto userId = s->userId;
+    const auto nickname = s->nickname;
+    if (!EnqueueSessionDB(s, [userId, nickname]() -> SessionDBCompletion {
+        UserProfileData profile{};
+        if (!UserManager::LoadUserProfile(userId, profile)) return {};
+        const RankInfo* rank = UserManager::GetRankInfo(profile.rank.rank);
+        if (!rank) return {};
+        PKT_RES_PROFILE_DATA pkt{};
+        strncpy_s(pkt.nickname, nickname.c_str(), _TRUNCATE);
+        pkt.level = profile.info.level;
+        pkt.exp = profile.info.exp;
+        pkt.rank = profile.rank.rank;
+        pkt.rankScore = profile.rank.rankScore;
+        strncpy_s(pkt.rankName, rank->name.c_str(), _TRUNCATE);
+        pkt.minScore = rank->minScore;
+        pkt.maxScore = rank->maxScore;
+        return [pkt](Session& session) {
+            SendPacket(&session, PKT_RES_PROFILE, &pkt, sizeof(pkt));
+        };
+    })) s->closing = true;
 }
 
 
 // 로그아웃 요청을 처리하고 세션을 종료 상태로 전환한다.
 void PacketManager::HandleLogout(Session* s)
 {
-	std::cout << "[LOGOUT] 처리 시작\n";
 
-	if (!s || s->userId.empty())
-		return;
-
-	std::cout << "[LOGOUT] user=" << s->userId << "\n";
-
-	if (s_matchMgr)
-		s_matchMgr->CancelMatch(s);
-
-	UserManager::LogoutUser(s->userId);
-
-	s->closing = true;
+    if (s_matchMgr && s->authenticated) s_matchMgr->CancelMatch(s);
+    HandleSessionDisconnect(s);
 }
 
 
@@ -469,36 +399,18 @@ void PacketManager::HandleLobbyChat(Session* sender, const char* body, int bodyS
 // 유저가 보유한 마법 슬롯 정보를 조회하여 전송한다.
 void PacketManager::HandleUserMagicRequest(Session* s)
 {
-	std::cout << "[MAGIC] HandleUserMagicRequest 시작\n";
 
-	if (!s || !s->authenticated)
-		return;
-
-	std::vector<int> slots;
-	if (!UserManager::LoadUserMagic(s->userId, slots))
-	{
-		std::cout << "[MAGIC] 슬롯 로드 실패 user=" << s->userId << "\n";
-		return;
-	}
-
-	PKT_RES_USER_MAGIC_STRUCT pkt{};
-	pkt.slotCount = static_cast<int32_t>(slots.size());
-
-	std::cout << "[MAGIC SLOT] user=" << s->userId << std::endl;
-
-	for (int i = 0; i < pkt.slotCount && i < 4; i++)
-	{
-		pkt.cardIds[i] = slots[i];
-
-		std::cout
-			<< "  slot " << i
-			<< " : cardId=" << slots[i]
-			<< std::endl;
-	}
-
-	SendPacket(s, PKT_RES_USER_MAGIC, &pkt, sizeof(pkt));
-
-	std::cout << "[MAGIC] 슬롯 바이너리 전송 완료 user=" << s->userId << "\n";
+    const auto userId = s->userId;
+    if (!EnqueueSessionDB(s, [userId]() -> SessionDBCompletion {
+        std::vector<int> slots;
+        if (!UserManager::LoadUserMagic(userId, slots)) return {};
+        PKT_RES_USER_MAGIC_STRUCT pkt{};
+        pkt.slotCount = static_cast<int32_t>((std::min)(slots.size(), size_t(4)));
+        for (int i = 0; i < pkt.slotCount; ++i) pkt.cardIds[i] = slots[i];
+        return [pkt](Session& session) {
+            SendPacket(&session, PKT_RES_USER_MAGIC, &pkt, sizeof(pkt));
+        };
+    })) s->closing = true;
 }
 
 
@@ -545,42 +457,20 @@ void PacketManager::HandleUserMagicDetail(Session* s, const char* body, int body
 // 유저의 마법 슬롯 구성을 교체하고 결과를 응답한다.
 void PacketManager::HandleReplaceUserMagic(Session* s, const char* body, int bodySize)
 {
-	std::cout << "[MAGIC REPLACE] 처리 시작\n";
 
-	if (!s || !s->authenticated)
-		return;
-
-	if (bodySize != sizeof(PKT_REQ_REPLACE_MAGIC_STURCT))
-	{
-		std::cout << "[MAGIC REPLACE] bodySize 오류\n";
-		return;
-	}
-
-	PKT_REQ_REPLACE_MAGIC_STURCT req{};
-	memcpy(&req, body, sizeof(req));
-
-	bool ok = UserManager::ReplaceUserMagic(
-		s->userId,
-		req.oldCardId,
-		req.newCardId
-	);
-
-	PKT_RES_REPLACE_USER_MAGIC_STURCT res{};
-	res.result = ok ? 1 : 0;
-
-	SendPacket(
-		s,
-		PKT_RES_REPLACE_USER_MAGIC,
-		&res,
-		sizeof(res)
-	);
-
-	std::cout << "[MAGIC REPLACE] "
-		<< (ok ? "성공" : "실패")
-		<< " user=" << s->userId
-		<< " old=" << req.oldCardId
-		<< " new=" << req.newCardId
-		<< "\n";
+    if (bodySize != sizeof(PKT_REQ_REPLACE_MAGIC_STURCT))
+    { s->closing = true; return; }
+    PKT_REQ_REPLACE_MAGIC_STURCT req{};
+    memcpy(&req, body, sizeof(req));
+    const auto userId = s->userId;
+    if (!EnqueueSessionDB(s, [userId, req]() -> SessionDBCompletion {
+        PKT_RES_REPLACE_USER_MAGIC_STURCT result{};
+        result.result = UserManager::GetCardInfo(req.newCardId) &&
+            UserManager::ReplaceUserMagic(userId, req.oldCardId, req.newCardId) ? 1 : 0;
+        return [result](Session& session) {
+            SendPacket(&session, PKT_RES_REPLACE_USER_MAGIC, &result, sizeof(result));
+        };
+    })) s->closing = true;
 }
 
 
@@ -752,9 +642,11 @@ void PacketManager::HandleDie(Session* winner, Session* loser)
 	std::string winId = winner->userId;
 	std::string loseId = loser->userId;
 
-	std::thread([winId, loseId, winner, loser]()
-		{
-			std::this_thread::sleep_for(std::chrono::seconds(3));
+    resultTasks.Schedule(std::chrono::seconds(3), [winId, loseId, winner, loser]()
+        {
+            std::unique_lock<std::recursive_mutex> winLock(winner->stateMtx, std::defer_lock);
+            std::unique_lock<std::recursive_mutex> loseLock(loser->stateMtx, std::defer_lock);
+            std::lock(winLock, loseLock);
 
 			PKT_RESULT_STRUCT v{}, d{};
 			strncpy_s(v.userId, winId.c_str(), _TRUNCATE);
@@ -763,20 +655,14 @@ void PacketManager::HandleDie(Session* winner, Session* loser)
 			SendPacket(winner, PKT_VICTORY, &v, sizeof(v));
 			SendPacket(loser, PKT_DEFEAT, &d, sizeof(d));
 
-			if (g_dbWorker)
-			{
-				g_dbWorker->Enqueue([winId, loseId]()
-					{
-						MatchManager::ProcessResultById(winId, loseId);
-					});
-			}
+            MatchManager::ProcessResultById(winId, loseId);
 
 			winner->inBattle = false;
 			loser->inBattle = false;
 			winner->battleOpponent = nullptr;
 			loser->battleOpponent = nullptr;
 
-		}).detach();
+		});
 }
 
 

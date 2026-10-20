@@ -1,4 +1,4 @@
-#include "MatchManager.h"
+ï»¿#include "MatchManager.h"
 #include "PacketManager.h"
 #include "DBWorkerInstance.h"
 #include <algorithm>
@@ -9,7 +9,7 @@ MatchManager::MatchManager()
 {
 }
 
-//  ¸ÅÄª ¿äÃ»
+//  ë§¤ì¹­ ìš”ì²­
 void MatchManager::RequestMatch(Session* session)
 {
     std::lock_guard<std::mutex> lock(queueMtx);
@@ -31,7 +31,7 @@ void MatchManager::RequestMatch(Session* session)
 }
 
 
-//  ¸ÅÄª Ãë¼Ò
+//  ë§¤ì¹­ ì·¨ì†Œ
 void MatchManager::CancelMatch(Session* session)
 {
     std::lock_guard<std::mutex> lock(queueMtx);
@@ -56,7 +56,7 @@ void MatchManager::CancelMatch(Session* session)
     );
 }
 
-//  ¸ÅÄª Ã³¸®
+//  ë§¤ì¹­ ì²˜ë¦¬
 void MatchManager::TryMatch()
 {
     if (matchQueue.size() < 2)
@@ -108,13 +108,13 @@ void MatchManager::TryMatch()
                 continue;
             }
 
-            // ¸ÅÄª ¼º»ç 
+            // ë§¤ì¹­ ì„±ì‚¬
             StartBattle(a, b);
             matched = true;
             break;
         }
 
-        // tempQueue º¹±¸
+        // tempQueue ë³µêµ¬
         while (!tempQueue.empty())
         {
             matchQueue.push(tempQueue.front());
@@ -167,7 +167,7 @@ void MatchManager::StartBattle(Session* a, Session* b)
 //        return;
 //
 //    // ------------------------
-//    // ·©Å© µ¥ÀÌÅÍ ·Îµå
+//    // ë­í¬ ë°ì´í„° ë¡œë“œ
 //    // ------------------------
 //    UserRankData winRank{};
 //    UserRankData loseRank{};
@@ -176,7 +176,7 @@ void MatchManager::StartBattle(Session* a, Session* b)
 //    if (!UserManager::LoadUserRank(loser->userId, loseRank)) return;
 //
 //    // ------------------------
-//    // ·©Å© Â÷ÀÌ °è»ê
+//    // ë­í¬ ì°¨ì´ ê³„ì‚°
 //    // ------------------------
 //    int rankDiff = winRank.rank - loseRank.rank;
 //    int baseDelta = CalculateBaseDelta(abs(rankDiff));
@@ -184,16 +184,16 @@ void MatchManager::StartBattle(Session* a, Session* b)
 //    int winDelta = baseDelta;
 //    int loseDelta = -baseDelta;
 //
-//    // ³·Àº ·©Å©°¡ ÀÌ±ä °æ¿ì ¡æ º¸³Ê½º
+//    // ë‚®ì€ ë­í¬ê°€ ì´ê¸´ ê²½ìš° â†’ ë³´ë„ˆìŠ¤
 //    if (rankDiff < 0)
 //        winDelta = static_cast<int>(winDelta * 1.5f);
 //
-//    // ³ôÀº ·©Å©°¡ Áø °æ¿ì ¡æ ÆĞ³ÎÆ¼ Áõ°¡
+//    // ë†’ì€ ë­í¬ê°€ ì§„ ê²½ìš° â†’ íŒ¨ë„í‹° ì¦ê°€
 //    if (rankDiff > 0)
 //        loseDelta = static_cast<int>(loseDelta * 1.5f);
 //
 //    // ------------------------
-//    // Á¡¼ö ¹İ¿µ
+//    // ì ìˆ˜ ë°˜ì˜
 //    // ------------------------
 //    winRank.mmr += winDelta;
 //    winRank.rankScore += winDelta;
@@ -201,24 +201,24 @@ void MatchManager::StartBattle(Session* a, Session* b)
 //    loseRank.mmr += loseDelta;
 //    loseRank.rankScore += loseDelta;
 //
-//    // À½¼ö ¹æÁö
+//    // ìŒìˆ˜ ë°©ì§€
 //    if (loseRank.rankScore < 0) loseRank.rankScore = 0;
 //    if (loseRank.mmr < 0) loseRank.mmr = 0;
 //
 //    // ------------------------
-//    // ·©Å© Àç°è»ê
+//    // ë­í¬ ì¬ê³„ì‚°
 //    // ------------------------
 //    winRank.rank = CalculateRankFromScore(winRank.rankScore);
 //    loseRank.rank = CalculateRankFromScore(loseRank.rankScore);
 //
 //    // ------------------------
-//    // ·©Å© ÀúÀå
+//    // ë­í¬ ì €ì¥
 //    // ------------------------
 //    UserManager::SaveUserRank(winner->userId, winRank);
 //    UserManager::SaveUserRank(loser->userId, loseRank);
 //
 //    // ------------------------
-//    // UserInfo (½Â/ÆĞ/EXP)
+//    // UserInfo (ìŠ¹/íŒ¨/EXP)
 //    // ------------------------
 //    UserInfoData winInfo{};
 //    UserInfoData loseInfo{};
@@ -226,18 +226,18 @@ void MatchManager::StartBattle(Session* a, Session* b)
 //    UserManager::LoadUserInfo(winner->userId, winInfo);
 //    UserManager::LoadUserInfo(loser->userId, loseInfo);
 //
-//    // ½ÂÆĞ ±â·Ï
+//    // ìŠ¹íŒ¨ ê¸°ë¡
 //    winInfo.win += 1;
 //    loseInfo.lose += 1;
 //
-//    // °æÇèÄ¡ °è»ê
+//    // ê²½í—˜ì¹˜ ê³„ì‚°
 //    int winExp = 50 + (loseRank.rank * 10);
 //    int loseExp = 20 + (winRank.rank * 5);
 //
 //    winInfo.exp += winExp;
 //    loseInfo.exp += loseExp;
 //
-//    // ·¹º§¾÷ Ã³¸® (·¹º§ * 100 ±âÁØ)
+//    // ë ˆë²¨ì—… ì²˜ë¦¬ (ë ˆë²¨ * 100 ê¸°ì¤€)
 //    while (winInfo.exp >= winInfo.level * 100)
 //    {
 //        winInfo.exp -= winInfo.level * 100;
@@ -250,7 +250,7 @@ void MatchManager::StartBattle(Session* a, Session* b)
 //        loseInfo.level += 1;
 //    }
 //
-//    // ÀúÀå
+//    // ì €ì¥
 //    UserManager::SaveUserRank(winner->userId, winRank);
 //    UserManager::SaveUserRank(loser->userId, loseRank);
 //
@@ -265,8 +265,9 @@ void MatchManager::ProcessResultById(
     const std::string& winnerId,
     const std::string& loserId)
 {
-    // DBWorker¿¡´Â "DB ÀúÀå"¸¸ ¸Ã±è
-    g_dbWorker->Enqueue([winnerId, loserId]() {
+    // DBWorkerì—ëŠ” "DB ì €ì¥"ë§Œ ë§¡ê¹€
+    if (!g_dbWorker) return;
+    if (!g_dbWorker->Enqueue([winnerId, loserId]() {
 
         UserRankData winRank{}, loseRank{};
         UserInfoData winInfo{}, loseInfo{};
@@ -274,7 +275,7 @@ void MatchManager::ProcessResultById(
         if (!UserManager::LoadUserRank(winnerId, winRank)) return;
         if (!UserManager::LoadUserRank(loserId, loseRank)) return;
 
-        // °è»ê
+        // ê³„ì‚°
         int rankDiff = winRank.rank - loseRank.rank;
         int delta = CalculateBaseDelta(abs(rankDiff));
 
@@ -292,13 +293,13 @@ void MatchManager::ProcessResultById(
 
         UserManager::SaveUserInfo(winnerId, winInfo);
         UserManager::SaveUserInfo(loserId, loseInfo);
-        });
+        })) std::cerr << "[DB] match result queue rejected\n";
 }
 
 
 int MatchManager::CalculateBaseDelta(int rankDiff)
 {
-    // ±âº» Á¡¼ö
+    // ê¸°ë³¸ ì ìˆ˜
     if (rankDiff >= 3) return 40;
     if (rankDiff == 2) return 30;
     if (rankDiff == 1) return 25;
@@ -313,7 +314,7 @@ int MatchManager::CalculateRankFromScore(int rankScore)
     if (rankScore < 2500) return 3;        // Platinum
     if (rankScore < 3000) return 4;        // Diamond
     if (rankScore < 3500) return 5;        // Master
-    return 6;                              // Grandmaster ÀÌ»ó
+    return 6;                              // Grandmaster ì´ìƒ
 }
 
 int MatchManager::GetAllowedMMRRange(int waitSeconds)

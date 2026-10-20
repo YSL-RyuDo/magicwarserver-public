@@ -1,4 +1,4 @@
-#include "PacketParser.h"
+ï»¿#include "PacketParser.h"
 #include "PacketManager.h"
 #include <iostream>
 #include <cstring>
@@ -10,10 +10,10 @@ void PacketParser::ProcessBuffer(Session* session)
 
     while (true)
     {
-        // 1. Çì´õ Å©±â ¹Ì¸¸ÀÌ¸é ´ë±â
+        // 1. í—¤ë” í¬ê¸° ë¯¸ë§Œì´ë©´ ëŒ€ê¸°
         if (used < (int)sizeof(PACKET_HEADER))
         {
-            std::cout << "[PARSER] Çì´õ ´ë±â Áß used=" << used << "\n";
+            std::cout << "[PARSER] í—¤ë” ëŒ€ê¸° ì¤‘ used=" << used << "\n";
             return;
         }
 
@@ -27,9 +27,8 @@ void PacketParser::ProcessBuffer(Session* session)
             << " bodySize=" << header.bodySize
             << " recvUsed=" << used
             << "\n";
-        // 2. ÃÖ¼ÒÇÑÀÇ ¾ÈÁ¤¼º Ã¼Å©¸¸ ¼öÇà
-        // ¿©±â¼­´Â Àı´ë closing ÇÏÁö ¾Ê´Â´Ù
-        if (header.bodySize > IOCP_BUFFER_SIZE)
+        // 2. í—¤ë”ë¥¼ í¬í•¨í•œ ì „ì²´ í”„ë ˆì„ì´ ëˆ„ì  ë²„í¼ì— ë“¤ì–´ê°€ì•¼ í•œë‹¤.
+        if (header.bodySize > IOCP_BUFFER_SIZE - sizeof(PACKET_HEADER))
         {
             std::cout
                 << "[PARSER WARN] invalid bodySize "
@@ -37,18 +36,19 @@ void PacketParser::ProcessBuffer(Session* session)
                 << " bodySize=" << header.bodySize
                 << "\n";
 
-            // ¹öÆÛ ÃÊ±âÈ­ (sync ±úÁ³´Ù°í °¡Á¤)
+            // ì˜ëª»ëœ ê¸¸ì´ ë’¤ì—ì„œ ì„ì˜ë¡œ ì¬ë™ê¸°í™”í•˜ì§€ ì•Šê³  ì—°ê²°ì„ ì¢…ë£Œí•œë‹¤.
+            session->closing = true;
             used = 0;
             return;
         }
 
         int totalSize = (int)sizeof(PACKET_HEADER) + header.bodySize;
 
-        // 3. ÆĞÅ¶ ÀüÃ¼ µµÂø ¿©ºÎ È®ÀÎ
+        // 3. íŒ¨í‚· ì „ì²´ ë„ì°© ì—¬ë¶€ í™•ì¸
         if (used < totalSize)
             return;
 
-        // 4. ÆĞÅ¶ Ã³¸® (º¸¾È ÆÇ´ÜÀº PacketManager¿¡¼­)
+        // 4. íŒ¨í‚· ì²˜ë¦¬ (ë³´ì•ˆ íŒë‹¨ì€ PacketManagerì—ì„œ)
         const char* body = buf + sizeof(PACKET_HEADER);
 
         PacketManager::HandlePacket(
@@ -59,8 +59,9 @@ void PacketParser::ProcessBuffer(Session* session)
             header.bodySize
         );
 
-        // 5. Ã³¸®ÇÑ µ¥ÀÌÅÍ Á¦°Å
+        // 5. ì²˜ë¦¬í•œ ë°ì´í„° ì œê±°
         memmove(buf, buf + totalSize, used - totalSize);
         used -= totalSize;
+        if (session->closing) return;
     }
 }
