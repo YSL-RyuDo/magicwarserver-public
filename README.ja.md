@@ -1,6 +1,8 @@
 # Arcana Duel / Server
 
-[English](README.md), [Korean](README.ko.md), [Japanese](README.ja.md)
+<!-- portfolio-languages -->
+[![English](https://ysl-ryudo.github.io/assets/diagrams/language-en.svg)](README.md) [![한국어](https://ysl-ryudo.github.io/assets/diagrams/language-ko.svg)](README.ko.md) [![日本語（選択中）](https://ysl-ryudo.github.io/assets/diagrams/language-ja-current.svg)](README.ja.md)
+<!-- /portfolio-languages -->
 
 プログラマー1名とグラフィック担当1名で制作した、マルチプレイヤー魔法バトルゲームです。
 
@@ -17,15 +19,21 @@
 
 [Arcana Duel](https://www.youtube.com/watch?v=MJo1y09kzd4), [Early development demo](https://www.youtube.com/watch?v=8sKpA2H9Ib4)
 
+## ゲーム内の実装
+
+[![装備中の4つの魔法とカード一覧を、サーバー保存のデッキに接続した画面です。](https://ysl-ryudo.github.io/assets/gameplay/arcana-deck.webp)](https://ysl-ryudo.github.io/assets/gameplay/arcana-deck.webp)
+
+装備中の4つの魔法とカード一覧を、サーバー保存のデッキに接続した画面です。
+
+[![ローカルサーバーで2クライアントがマッチングし、魔法とダメージのイベントを交換する戦闘画面です。](https://ysl-ryudo.github.io/assets/gameplay/arcana-combat.webp)](https://ysl-ryudo.github.io/assets/gameplay/arcana-combat.webp)
+
+ローカルサーバーで2クライアントがマッチングし、魔法とダメージのイベントを交換する戦闘画面です。
+
 ## ゲーム全体で担当した実装
 
-UnityとC++の両側でデッキ編成、キャラクター操作、魔法動作、通信機能、試合結果まで主要なプログラミングを実装しました。画像・音源の制作者を尊重し、共同の音声・UI変更や別メンバーによるクレジット画面を単独成果には含めません。
+Unityでデッキ編成、キャラクター操作、魔法発動、戦闘UI、試合結果を実装しました。C++通信サーバーとデータベース要求処理も開発しました。
 
-**プレイの流れ**
-
-ログイン → ロビーと魔法デッキ編成 → マッチングとロード → 移動と魔法戦闘 → 勝敗 → ロビー復帰
-
-ソースリンクは確認した版に固定し、担当リンクは自分のマージ以外の変更を示します。共同ファイルは単独著作を意味しません。非公開ソースには閲覧権限が必要です。
+[![担当実装の流れ](https://ysl-ryudo.github.io/assets/diagrams/magicwar-flow-ja.svg)](https://ysl-ryudo.github.io/assets/diagrams/magicwar-flow-ja.svg)
 
 ### アカウント、ロビーとマッチング
 
@@ -47,7 +55,7 @@ UnityとC++の両側でデッキ編成、キャラクター操作、魔法動作
 
 ### 移動、状態効果と相手キャラクター
 
-スロー、スタン、詠唱制約を反映するローカル移動・アニメーションと、相手の移動・攻撃・被弾・死亡表示を実装しました。一部はローカル処理や表示を含み、全移動をサーバー権威型と表現しません。
+スロー、スタン、詠唱制約を反映するローカル移動・アニメーションと、相手の移動・攻撃・被弾・死亡表示を実装しました。ローカル入力と遠隔キャラクター表示を別経路で扱います。
 
 [CharacterController2D.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Player/CharacterController2D.cs), [担当変更 a6f8138](https://github.com/YSL-RyuDo/magicwar/commit/a6f81385bb004f7ddae57ac3ea8c29bddd604b9b), [EnemyService.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Enemy/EnemyService.cs), [担当変更 2f2abc5](https://github.com/YSL-RyuDo/magicwar/commit/2f2abc5397d4bc8981d862c7a6e8f117cb11138a)
 
@@ -63,21 +71,13 @@ IOCPサーバーのメッセージ境界復元、セッション資源、専用D
 
 [PacketParser.cpp (main)](https://github.com/YSL-RyuDo/magicwarserver/blob/54d5e47c5121c31c945aaec206d7e5d4644c9789/projectMagicWar/PacketParser.cpp), [担当変更 5007ff1](https://github.com/YSL-RyuDo/magicwarserver/commit/5007ff1c1c2f0ed204843307d3b3a9c7b8091381), [DBWorker.cpp (main)](https://github.com/YSL-RyuDo/magicwarserver/blob/54d5e47c5121c31c945aaec206d7e5d4644c9789/projectMagicWar/DBWorker.cpp), [担当変更 5007ff1](https://github.com/YSL-RyuDo/magicwarserver/commit/5007ff1c1c2f0ed204843307d3b3a9c7b8091381)
 
-## 担当した内容
-
-接続受付、IOCPワーカー、送受信処理を実装しました。
-
-セッション・バッファー・overlappedのプールと、ネットワーク処理から分離したDBワーカーを担当しました。
-
-魔法、クールダウン、試合、プロフィール、ランクに関するゲームサービスを実装しました。
-
 ## 貢献の根拠
 
 [IOCP implementation](https://github.com/YSL-RyuDo/magicwarserver/blob/48daa832f20fab13309e17a4a7af5e283b52d355/projectMagicWar/IOCP_GameServer.cpp)
 
 [Development history / 개발 이력 / 開発履歴](https://github.com/YSL-RyuDo/magicwarserver/commits/main/?author=YSL-RyuDo)
 
-コミットは記載した変更の根拠であり、貢献率の点数ではありません。外部素材・チームメンバーの貢献は区別します。
+外部素材・チームメンバーの貢献は区別します。
 
 ## 実装と設計
 
@@ -87,7 +87,9 @@ IOCPワーカー、セッション・バッファー・Overlappedプール、独
 
 ## コードの動作と実装構造の理由
 
-確認した実装が扱う制約と利点・代償を説明します。設計効果の説明はコード分析であり、比較する全代案を当時試作したという意味ではありません。担当リンクは共同制作内の変更を示し、ソースの閲覧権限は維持します。
+[![デッキ交換と画面更新](https://ysl-ryudo.github.io/assets/diagrams/magicwar-design-ja.svg)](https://ysl-ryudo.github.io/assets/diagrams/magicwar-design-ja.svg)
+
+交換候補はサーバー応答まで保留します。成功するとデッキを再読込し、失敗はログへ記録します。
 
 ### DB待機とネットワーク完了処理を分ける理由
 
@@ -105,7 +107,7 @@ DBの直接呼出しはキュー不要ですが保存待ちと通信処理を結
 
 **利点・代償と検証範囲**
 
-単一DBワーカーは順次実行を簡単にしますが、要求がたまるとボトルネックになります。キュー上限、取消、終了時の残タスク完了は別の課題であり、確認したStop実装は全処理完了の保証ではありません。この分離だけでは実測スループットや複数DB更新の原子性も示せません。
+DBワーカーを1つにすると実行順序は単純になりますが、要求が蓄積するとボトルネックになります。キュー容量、取消、終了時に残った仕事を処理する方針が必要です。
 
 [magicwarserver/DBWorker.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/DBWorker.cpp), [magicwarserver/MatchManager.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/MatchManager.cpp)
 
@@ -125,7 +127,7 @@ TCPは順序のあるバイトストリームなので、送信と受信の境�
 
 **利点・代償と検証範囲**
 
-層を増やす分、長さ、容量、オブジェクト寿命の管理が必要です。プール容量は割当て設定であり、実証された同時接続人数ではありません。ヘッダー分割、本文分割、複数メッセージの同時受信、I/O待機中の切断が検証対象になります。
+フレーミングには長さ・容量の検査とオブジェクト寿命の管理が必要です。ヘッダーや本文の分割、1回の受信に複数メッセージが含まれる場合、I/O待機中の切断を扱います。
 
 [magicwarserver/PacketParser.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/PacketParser.cpp), [magicwarserver/IOCP_Recv.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/IOCP_Recv.cpp)
 
@@ -145,7 +147,7 @@ MagicCasterは発動前にローカルCardDataのプレハブとサーバー由�
 
 **利点・代償と検証範囲**
 
-カードID、プレハブ、実行時レコードの互換性が必要です。隕石ID例外と必須コンポーネントは検証点です。サーバー由来の数値だけでは全命中・移動のサーバー検証は証明できません。
+カードID、プレハブ、実行時レコードの対応を維持する必要があります。魔法追加時には隕石IDの例外とプレハブの必須コンポーネントを確認します。
 
 [magicwar/MagicCaster.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Magic/MagicCaster.cs), [magicwar/CardStatManager.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Setting/CardStatManager.cs)
 
@@ -165,7 +167,7 @@ SettingSystemはスロット選択中に候補カードIDを保持します。�
 
 **利点・代償と検証範囲**
 
-確認コードは表示スプライトから旧カードを探し、失敗をログへ出します。明示的スロットID、処理中表示、タイムアウトがあれば規約が明確になります。完全な失敗復旧とは表現しません。
+現実装は表示スプライトから以前のカードを特定し、交換失敗をログへ記録します。明示的なスロットID、処理中状態、タイムアウトを加えると表示状態への依存を減らせます。
 
 [magicwar/SettingSystem.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Setting/SettingSystem.cs)
 
@@ -174,10 +176,6 @@ SettingSystemはスロット選択中に候補カードIDを保持します。�
 Windows C++ワークロードを備えたVisual Studioで[projectMagicWar.sln](projectMagicWar.sln)を開いてください。構成・データパス・依存関係・接続設定を確認し、対応するクライアントを起動します。既存アカウントデータは維持してください。
 
 [magicwar](https://github.com/YSL-RyuDo/magicwar)
-
-## 開発・検証範囲
-
-過去の実装で、実測同時接続容量は主張しません。起動コードにローカルDB設定があるため、実行前に隔離された開発環境に合わせて確認してください。プール容量を検証済みプレイヤー数と解釈しないでください。
 
 ## 関連リポジトリ
 

@@ -1,6 +1,8 @@
 # Arcana Duel / Server
 
-[English](README.md), [Korean](README.ko.md), [Japanese](README.ja.md)
+<!-- portfolio-languages -->
+[![English (current)](https://ysl-ryudo.github.io/assets/diagrams/language-en-current.svg)](README.md) [![한국어](https://ysl-ryudo.github.io/assets/diagrams/language-ko.svg)](README.ko.md) [![日本語](https://ysl-ryudo.github.io/assets/diagrams/language-ja.svg)](README.ja.md)
+<!-- /portfolio-languages -->
 
 A multiplayer magic-combat game, built by one programmer and one graphics teammate.
 
@@ -17,15 +19,21 @@ A multiplayer magic-combat game, built by one programmer and one graphics teamma
 
 [Arcana Duel](https://www.youtube.com/watch?v=MJo1y09kzd4), [Early development demo](https://www.youtube.com/watch?v=8sKpA2H9Ib4)
 
+## Inside the game
+
+[![Four equipped spells and the available card list are connected to the server-stored deck.](https://ysl-ryudo.github.io/assets/gameplay/arcana-deck.webp)](https://ysl-ryudo.github.io/assets/gameplay/arcana-deck.webp)
+
+Four equipped spells and the available card list are connected to the server-stored deck.
+
+[![Two local clients complete matchmaking and exchange spell and damage events in combat.](https://ysl-ryudo.github.io/assets/gameplay/arcana-combat.webp)](https://ysl-ryudo.github.io/assets/gameplay/arcana-combat.webp)
+
+Two local clients complete matchmaking and exchange spell and damage events in combat.
+
 ## What I built across the game
 
-I implemented the game's main programming flow on both Unity and C++: deck setup, character control, spell behavior, network services and match results. Art and audio assets retain their creators' credits; shared audio/UI changes and the separately authored credits screen are not presented as my sole work.
+I implemented deck editing, character control, spell casting, combat UI and match results in Unity, alongside the C++ network server and database request processing.
 
-**Player flow**
-
-Login → lobby and deck editing → matching and loading → movement and spell combat → victory or defeat → lobby
-
-Source links pin the inspected revision; contribution links identify my non-merge changes. Shared-file links do not imply sole authorship. Private source requires repository access.
+[![My implementation flow](https://ysl-ryudo.github.io/assets/diagrams/magicwar-flow-en.svg)](https://ysl-ryudo.github.io/assets/diagrams/magicwar-flow-en.svg)
 
 ### Account, lobby and matching
 
@@ -47,7 +55,7 @@ Implemented input and cooldown handling, projectile spawning and field-type spel
 
 ### Movement, status effects and remote actors
 
-Implemented local movement and animation with slow, stun and casting restrictions, and remote actor updates for movement, attacks, damage and death. Some effects include local prediction or presentation; this implementation should not be described as fully server-authoritative movement.
+Implemented local movement and animation with slow, stun and casting restrictions, and remote actor updates for movement, attacks, damage and death. Local input processing and remote presentation use separate paths.
 
 [CharacterController2D.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Player/CharacterController2D.cs), [My change a6f8138](https://github.com/YSL-RyuDo/magicwar/commit/a6f81385bb004f7ddae57ac3ea8c29bddd604b9b), [EnemyService.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Enemy/EnemyService.cs), [My change 2f2abc5](https://github.com/YSL-RyuDo/magicwar/commit/2f2abc5397d4bc8981d862c7a6e8f117cb11138a)
 
@@ -63,21 +71,11 @@ Built the IOCP server's message framing, session resources and separate database
 
 [PacketParser.cpp (main)](https://github.com/YSL-RyuDo/magicwarserver/blob/54d5e47c5121c31c945aaec206d7e5d4644c9789/projectMagicWar/PacketParser.cpp), [My change 5007ff1](https://github.com/YSL-RyuDo/magicwarserver/commit/5007ff1c1c2f0ed204843307d3b3a9c7b8091381), [DBWorker.cpp (main)](https://github.com/YSL-RyuDo/magicwarserver/blob/54d5e47c5121c31c945aaec206d7e5d4644c9789/projectMagicWar/DBWorker.cpp), [My change 5007ff1](https://github.com/YSL-RyuDo/magicwarserver/commit/5007ff1c1c2f0ed204843307d3b3a9c7b8091381)
 
-## My contribution
-
-Implemented connection acceptance and IOCP workers with receive/send processing.
-
-Worked on session/buffer/overlapped pools and a DB worker separated from network processing.
-
-Implemented game services around magic, cooldowns, matches, player profiles and ranks.
-
 ## Contribution evidence
 
 [IOCP implementation](https://github.com/YSL-RyuDo/magicwarserver/blob/48daa832f20fab13309e17a4a7af5e283b52d355/projectMagicWar/IOCP_GameServer.cpp)
 
 [Development history / 개발 이력 / 開発履歴](https://github.com/YSL-RyuDo/magicwarserver/commits/main/?author=YSL-RyuDo)
-
-Commits are evidence of the stated changes, not a percentage-of-authorship score. Third-party assets and teammates' work remain separately credited.
 
 ## Implementation and design
 
@@ -87,7 +85,9 @@ The server uses IOCP workers, session/buffer/overlapped pools and a separate DB 
 
 ## How the code works and why it is structured this way
 
-These notes connect the inspected implementation to the constraints it addresses and its tradeoffs. Explanations of design consequences are code analysis, not a claim that every alternative was prototyped. Contribution links identify my changes within team projects; source links retain their original access permissions.
+[![Deck replacement](https://ysl-ryudo.github.io/assets/diagrams/magicwar-design-en.svg)](https://ysl-ryudo.github.io/assets/diagrams/magicwar-design-en.svg)
+
+The selected replacement stays pending until the server response. Success triggers a fresh deck read; failure is logged.
 
 ### Database latency stays outside network completion work
 
@@ -105,7 +105,7 @@ Executing DB calls inline avoids another queue but couples storage wait to netwo
 
 **Tradeoffs and verification**
 
-A single DB worker preserves serial execution but can become a queue bottleneck. Queue bounds, cancellation and draining pending tasks during shutdown are separate concerns; the inspected Stop implementation is not a drain guarantee. This separation alone does not establish higher measured throughput or transaction atomicity.
+One database worker simplifies execution order but can become a bottleneck as requests accumulate. Queue capacity, cancellation and draining pending work during shutdown need explicit policies.
 
 [magicwarserver/DBWorker.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/DBWorker.cpp), [magicwarserver/MatchManager.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/MatchManager.cpp)
 
@@ -125,7 +125,7 @@ Delimiter-based messages are easy to inspect but require escaping rules for arbi
 
 **Tradeoffs and verification**
 
-The extra layer requires careful length, capacity and lifetime rules. Pool capacity is an allocation setting, not a demonstrated concurrent-player count. Useful validation includes split headers, split bodies, multiple messages in one receive and disconnects with pending I/O.
+Framing requires length and capacity checks and careful object lifetimes. Important cases include split headers/bodies, several messages in one receive and disconnects while I/O is pending.
 
 [magicwarserver/PacketParser.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/PacketParser.cpp), [magicwarserver/IOCP_Recv.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/IOCP_Recv.cpp)
 
@@ -145,7 +145,7 @@ Putting every value in the prefab minimizes lookups but duplicates balance data.
 
 **Tradeoffs and verification**
 
-Card IDs, prefabs and runtime records must stay compatible. The meteor ID exception and required prefab components are coupling points worth testing. Receiving values from a server does not by itself prove that all hits or movement are validated there.
+Card IDs, prefabs and runtime records must stay aligned. The meteor ID exception and required prefab components are coupling points to check when adding a spell.
 
 [magicwar/MagicCaster.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Magic/MagicCaster.cs), [magicwar/CardStatManager.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Setting/CardStatManager.cs)
 
@@ -165,7 +165,7 @@ An optimistic local swap feels immediate but needs rollback. Returning the full 
 
 **Tradeoffs and verification**
 
-The inspected code derives the old card from its displayed sprite and logs unsuccessful changes. Explicit slot identity, pending-state feedback and timeout behavior would make that contract clearer. The current implementation should not be described as complete failure recovery.
+The current code identifies the previous card from its displayed sprite and logs replacement failures. Explicit slot IDs, a pending state and timeout handling would make the interaction less dependent on presentation state.
 
 [magicwar/SettingSystem.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Setting/SettingSystem.cs)
 
@@ -174,10 +174,6 @@ The inspected code derives the old card from its displayed sprite and logs unsuc
 Open [projectMagicWar.sln](projectMagicWar.sln) in Visual Studio with the Windows C++ workload. Inspect the selected configuration, data paths, dependencies and endpoint settings before starting the matching client. Preserve existing account data.
 
 [magicwar](https://github.com/YSL-RyuDo/magicwar)
-
-## Development and verification scope
-
-Historical implementation; no measured concurrent-user capacity is claimed. The checked-in startup code contains local database configuration: review and supply an appropriate isolated development configuration before running. Pool capacities are implementation settings, not demonstrated player counts.
 
 ## Related repositories
 

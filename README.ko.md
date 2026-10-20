@@ -1,6 +1,8 @@
 # 아르카나 듀얼, Arcana Duel / Server
 
-[English](README.md), [Korean](README.ko.md), [Japanese](README.ja.md)
+<!-- portfolio-languages -->
+[![English](https://ysl-ryudo.github.io/assets/diagrams/language-en.svg)](README.md) [![한국어 (현재 언어)](https://ysl-ryudo.github.io/assets/diagrams/language-ko-current.svg)](README.ko.md) [![日本語](https://ysl-ryudo.github.io/assets/diagrams/language-ja.svg)](README.ja.md)
+<!-- /portfolio-languages -->
 
 프로그래머 1명과 그래픽 1명이 함께 만든 멀티플레이 마법 전투 게임입니다.
 
@@ -17,15 +19,21 @@
 
 [Arcana Duel](https://www.youtube.com/watch?v=MJo1y09kzd4), [Early development demo](https://www.youtube.com/watch?v=8sKpA2H9Ib4)
 
+## 게임에서 보는 구현
+
+[![장착한 네 가지 마법과 전체 카드 목록을 서버에 저장된 덱과 연결한 화면입니다.](https://ysl-ryudo.github.io/assets/gameplay/arcana-deck.webp)](https://ysl-ryudo.github.io/assets/gameplay/arcana-deck.webp)
+
+장착한 네 가지 마법과 전체 카드 목록을 서버에 저장된 덱과 연결한 화면입니다.
+
+[![로컬 서버에서 두 클라이언트가 매칭을 마치고 마법과 피해 이벤트를 주고받는 전투 화면입니다.](https://ysl-ryudo.github.io/assets/gameplay/arcana-combat.webp)](https://ysl-ryudo.github.io/assets/gameplay/arcana-combat.webp)
+
+로컬 서버에서 두 클라이언트가 매칭을 마치고 마법과 피해 이벤트를 주고받는 전투 화면입니다.
+
 ## 게임 전체에서 맡은 구현
 
-Unity와 C++ 양쪽에서 덱 편성, 캐릭터 조작, 마법 동작, 네트워크 서비스와 경기 결과까지 주요 프로그래밍 흐름을 구현했습니다. 그래픽과 음원은 제작자의 크레딧을 유지하며, 공동으로 수정한 음향과 UI, 다른 팀원이 작성한 크레딧 화면을 제 단독 작업으로 소개하지 않습니다.
+Unity에서 덱 편성, 캐릭터 조작, 마법 시전, 전투 UI와 경기 결과를 구현했습니다. C++ 네트워크 서버와 데이터베이스 요청 처리도 개발했습니다.
 
-**플레이 흐름**
-
-로그인 → 로비와 마법 덱 편성 → 매칭과 로딩 → 이동과 마법 전투 → 승패 → 로비 복귀
-
-소스 링크는 확인한 버전에 고정하고 기여 링크는 제가 작성한 병합 외 변경을 가리킵니다. 공동 파일을 연결했다고 단독 작성이라는 뜻은 아닙니다. 비공개 소스는 저장소 접근 권한이 필요합니다.
+[![담당 구현 흐름](https://ysl-ryudo.github.io/assets/diagrams/magicwar-flow-ko.svg)](https://ysl-ryudo.github.io/assets/diagrams/magicwar-flow-ko.svg)
 
 ### 계정, 로비와 매칭
 
@@ -47,7 +55,7 @@ Unity와 C++ 양쪽에서 덱 편성, 캐릭터 조작, 마법 동작, 네트워
 
 ### 이동, 상태 효과와 상대 캐릭터
 
-둔화와 기절, 시전 제약을 반영하는 로컬 이동과 애니메이션, 상대 캐릭터의 이동과 공격, 피격과 사망 표시를 구현했습니다. 일부 효과는 로컬 처리와 표시를 포함하므로 전체 이동을 서버 권위 방식으로 구현했다고 설명하지 않습니다.
+둔화와 기절, 시전 제약을 반영하는 로컬 이동과 애니메이션, 상대 캐릭터의 이동과 공격, 피격과 사망 표시를 구현했습니다. 로컬 입력 처리와 원격 캐릭터 표시를 별도 경로로 다룹니다.
 
 [CharacterController2D.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Player/CharacterController2D.cs), [내 변경 a6f8138](https://github.com/YSL-RyuDo/magicwar/commit/a6f81385bb004f7ddae57ac3ea8c29bddd604b9b), [EnemyService.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Enemy/EnemyService.cs), [내 변경 2f2abc5](https://github.com/YSL-RyuDo/magicwar/commit/2f2abc5397d4bc8981d862c7a6e8f117cb11138a)
 
@@ -63,21 +71,11 @@ IOCP 서버의 메시지 경계 복원, 세션 자원과 별도 DB 작업자를 
 
 [PacketParser.cpp (main)](https://github.com/YSL-RyuDo/magicwarserver/blob/54d5e47c5121c31c945aaec206d7e5d4644c9789/projectMagicWar/PacketParser.cpp), [내 변경 5007ff1](https://github.com/YSL-RyuDo/magicwarserver/commit/5007ff1c1c2f0ed204843307d3b3a9c7b8091381), [DBWorker.cpp (main)](https://github.com/YSL-RyuDo/magicwarserver/blob/54d5e47c5121c31c945aaec206d7e5d4644c9789/projectMagicWar/DBWorker.cpp), [내 변경 5007ff1](https://github.com/YSL-RyuDo/magicwarserver/commit/5007ff1c1c2f0ed204843307d3b3a9c7b8091381)
 
-## 내 기여
-
-연결 수락, IOCP 워커와 수신, 송신 처리를 구현했습니다.
-
-세션, 버퍼, overlapped 풀과 네트워크 처리에서 분리한 DB 워커를 작업했습니다.
-
-마법, 쿨다운, 매치, 플레이어 프로필, 랭크 관련 게임 서비스를 구현했습니다.
-
 ## 기여 근거
 
 [IOCP implementation](https://github.com/YSL-RyuDo/magicwarserver/blob/48daa832f20fab13309e17a4a7af5e283b52d355/projectMagicWar/IOCP_GameServer.cpp)
 
 [Development history / 개발 이력 / 開発履歴](https://github.com/YSL-RyuDo/magicwarserver/commits/main/?author=YSL-RyuDo)
-
-커밋은 설명한 변경의 근거이며 기여율 점수가 아닙니다. 외부 에셋과 팀원 작업의 크레딧은 구분합니다.
 
 ## 구현과 설계
 
@@ -87,7 +85,9 @@ IOCP 워커, 세션, 버퍼, Overlapped 풀과 별도 DB 워커를 구성했습�
 
 ## 코드의 동작과 구현 방식을 택한 이유
 
-확인한 구현이 어떤 제약을 다루며 어떤 장단점이 생기는지 설명합니다. 설계 효과에 대한 설명은 코드 분석이며, 비교한 모든 대안을 당시 직접 구현했다는 뜻은 아닙니다. 기여 링크는 공동 프로젝트 안의 담당 변경을 가리키고 소스 링크는 기존 접근 권한을 유지합니다.
+[![덱 교체 요청과 화면 갱신](https://ysl-ryudo.github.io/assets/diagrams/magicwar-design-ko.svg)](https://ysl-ryudo.github.io/assets/diagrams/magicwar-design-ko.svg)
+
+교체할 카드는 서버 응답까지 대기합니다. 성공하면 덱을 다시 읽고, 실패하면 로그를 남깁니다.
 
 ### DB 대기와 네트워크 완료 처리를 분리한 이유
 
@@ -105,7 +105,7 @@ DB를 즉시 호출하면 큐가 필요 없지만 저장 대기가 네트워크 
 
 **장단점과 검증 범위**
 
-DB 작업자 하나는 순차 실행을 단순하게 만들지만 요청이 쌓이면 병목이 될 수 있습니다. 큐 용량, 취소, 종료 시 남은 작업을 모두 처리하는 정책은 별도 문제이며, 확인한 Stop 구현을 작업 완료 보장으로 해석하지 않습니다. 이 분리만으로 처리량 향상 수치나 여러 DB 변경의 원자성이 입증되는 것도 아닙니다.
+DB 작업자 하나로 실행 순서를 단순하게 만들지만 요청이 쌓이면 병목이 됩니다. 큐 용량과 취소, 종료 시 남은 작업을 처리하는 정책을 별도로 정해야 합니다.
 
 [magicwarserver/DBWorker.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/DBWorker.cpp), [magicwarserver/MatchManager.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/MatchManager.cpp)
 
@@ -125,7 +125,7 @@ TCP는 순서 있는 바이트 스트림이므로 송신 한 번과 수신 한 �
 
 **장단점과 검증 범위**
 
-계층을 추가한 만큼 길이, 용량, 객체 수명을 주의해서 관리해야 합니다. 풀의 용량은 할당 설정이며 입증된 동시 접속 인원이 아닙니다. 검증에서는 나뉜 헤더와 본문, 한 수신에 모인 여러 메시지, I/O 대기 중 연결 종료를 다뤄야 합니다.
+메시지 경계를 복원하려면 길이와 용량 검사, 객체 수명 관리가 필요합니다. 헤더와 본문이 나뉘어 오는 경우, 한 수신에 여러 메시지가 들어오는 경우와 I/O 대기 중 연결 종료를 처리해야 합니다.
 
 [magicwarserver/PacketParser.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/PacketParser.cpp), [magicwarserver/IOCP_Recv.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/IOCP_Recv.cpp)
 
@@ -145,7 +145,7 @@ MagicCaster는 시전 전에 로컬 CardData의 프리팹과 서버에서 받은
 
 **장단점과 검증 범위**
 
-카드 ID와 프리팹, 런타임 레코드가 서로 맞아야 합니다. 운석 ID 예외와 프리팹의 필수 컴포넌트는 검사할 결합 지점입니다. 서버에서 수치를 받는다는 사실만으로 모든 피격과 이동을 서버가 검증한다고 볼 수는 없습니다.
+카드 ID와 프리팹, 런타임 레코드가 서로 맞아야 합니다. 마법을 추가할 때 운석 ID 예외와 프리팹의 필수 컴포넌트를 함께 확인해야 합니다.
 
 [magicwar/MagicCaster.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Magic/MagicCaster.cs), [magicwar/CardStatManager.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Setting/CardStatManager.cs)
 
@@ -165,7 +165,7 @@ SettingSystem은 슬롯을 고르는 동안 교체할 카드 ID를 임시로 보
 
 **장단점과 검증 범위**
 
-확인한 코드는 표시된 스프라이트에서 이전 카드를 찾고 변경 실패를 로그로 남깁니다. 명시적인 슬롯 식별자, 처리 중 표시와 시간 초과 처리를 더하면 규격이 명확해질 수 있습니다. 현재 코드를 완전한 실패 복구로 소개하지 않습니다.
+현재 코드는 표시된 스프라이트에서 이전 카드를 찾고 교체 실패를 로그로 남깁니다. 명시적인 슬롯 ID와 처리 중 상태, 시간 초과 처리를 추가하면 화면 표시와 요청 처리를 더 명확하게 분리할 수 있습니다.
 
 [magicwar/SettingSystem.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Setting/SettingSystem.cs)
 
@@ -174,10 +174,6 @@ SettingSystem은 슬롯을 고르는 동안 교체할 카드 ID를 임시로 보
 Windows C++ 워크로드가 설치된 Visual Studio에서 [projectMagicWar.sln](projectMagicWar.sln)을 여세요. 구성, 데이터 경로, 의존성, 접속 설정을 확인한 뒤 대응하는 클라이언트를 실행하세요. 기존 계정 데이터를 보존하세요.
 
 [magicwar](https://github.com/YSL-RyuDo/magicwar)
-
-## 개발, 검증 범위
-
-과거 구현이며 측정된 동시 접속 수용량은 주장하지 않습니다. 시작 코드에 로컬 DB 설정이 있으므로 실행 전에 격리된 개발 환경에 맞게 확인해야 합니다. 풀 용량 설정을 검증된 플레이어 수로 해석하지 않습니다.
 
 ## 관련 저장소
 
