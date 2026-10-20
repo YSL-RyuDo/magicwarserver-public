@@ -63,19 +63,19 @@ Unityでデッキ編成、キャラクター操作、魔法発動、戦闘UI、�
 
 体力・魔法クールダウンUI、勝敗表示、ロビー復帰を実装しました。戦闘・結果状態を画面に反映し、サーバーの試合・プロフィール・ランク処理も接続しました。
 
-[GameUIController.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Game/GameUIController.cs), [担当変更 2f2abc5](https://github.com/YSL-RyuDo/magicwar/commit/2f2abc5397d4bc8981d862c7a6e8f117cb11138a), [MatchManager.cpp (main)](https://github.com/YSL-RyuDo/magicwarserver/blob/54d5e47c5121c31c945aaec206d7e5d4644c9789/projectMagicWar/MatchManager.cpp), [担当変更 5007ff1](https://github.com/YSL-RyuDo/magicwarserver/commit/5007ff1c1c2f0ed204843307d3b3a9c7b8091381)
+[GameUIController.cs (main)](https://github.com/YSL-RyuDo/magicwar/blob/20cff216e385494429a4629127ef85f8732a82db/Assets/Script/Game/GameUIController.cs), [担当変更 2f2abc5](https://github.com/YSL-RyuDo/magicwar/commit/2f2abc5397d4bc8981d862c7a6e8f117cb11138a), [MatchManager.cpp (main)](https://github.com/YSL-RyuDo/magicwarserver-public/blob/e45825a76f6160e1e362546cb2fa09b44e4fdfd3/projectMagicWar/MatchManager.cpp), [担当変更 5007ff1](https://github.com/YSL-RyuDo/magicwarserver-public/commit/010868f1cce4bae4a9955d03415f1c2f2d77fca5)
 
 ### 通信処理と永続化
 
 IOCPサーバーのメッセージ境界復元、セッション資源、専用DBワーカーを実装しました。後述ではTCPメッセージ復元と保存待ちを、結果を利用するゲーム処理から分ける理由を説明します。
 
-[PacketParser.cpp (main)](https://github.com/YSL-RyuDo/magicwarserver/blob/54d5e47c5121c31c945aaec206d7e5d4644c9789/projectMagicWar/PacketParser.cpp), [担当変更 5007ff1](https://github.com/YSL-RyuDo/magicwarserver/commit/5007ff1c1c2f0ed204843307d3b3a9c7b8091381), [DBWorker.cpp (main)](https://github.com/YSL-RyuDo/magicwarserver/blob/54d5e47c5121c31c945aaec206d7e5d4644c9789/projectMagicWar/DBWorker.cpp), [担当変更 5007ff1](https://github.com/YSL-RyuDo/magicwarserver/commit/5007ff1c1c2f0ed204843307d3b3a9c7b8091381)
+[PacketParser.cpp (main)](https://github.com/YSL-RyuDo/magicwarserver-public/blob/e45825a76f6160e1e362546cb2fa09b44e4fdfd3/projectMagicWar/PacketParser.cpp), [担当変更 5007ff1](https://github.com/YSL-RyuDo/magicwarserver-public/commit/010868f1cce4bae4a9955d03415f1c2f2d77fca5), [DBWorker.cpp (main)](https://github.com/YSL-RyuDo/magicwarserver-public/blob/e45825a76f6160e1e362546cb2fa09b44e4fdfd3/projectMagicWar/DBWorker.cpp), [担当変更 5007ff1](https://github.com/YSL-RyuDo/magicwarserver-public/commit/010868f1cce4bae4a9955d03415f1c2f2d77fca5)
 
 ## 貢献の根拠
 
-[IOCP implementation](https://github.com/YSL-RyuDo/magicwarserver/blob/48daa832f20fab13309e17a4a7af5e283b52d355/projectMagicWar/IOCP_GameServer.cpp)
+[IOCP implementation](https://github.com/YSL-RyuDo/magicwarserver-public/blob/6b36439fa77a183c365fe4b7ab34a88d0adfdf47/projectMagicWar/IOCP_GameServer.cpp)
 
-[Development history / 개발 이력 / 開発履歴](https://github.com/YSL-RyuDo/magicwarserver/commits/main/?author=YSL-RyuDo)
+[Development history / 개발 이력 / 開発履歴](https://github.com/YSL-RyuDo/magicwarserver-public/commits/main/?author=YSL-RyuDo)
 
 外部素材・チームメンバーの貢献は区別します。
 
@@ -109,7 +109,7 @@ DBの直接呼出しはキュー不要ですが保存待ちと通信処理を結
 
 DBワーカーを1つにすると実行順序は単純になりますが、要求が蓄積するとボトルネックになります。キュー容量、取消、終了時に残った仕事を処理する方針が必要です。
 
-[magicwarserver/DBWorker.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/DBWorker.cpp), [magicwarserver/MatchManager.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/MatchManager.cpp)
+[magicwarserver/DBWorker.cpp](https://github.com/YSL-RyuDo/magicwarserver-public/blob/c38570bda4b1eb81ad7b47a872ff369b6121073d/projectMagicWar/DBWorker.cpp), [magicwarserver/MatchManager.cpp](https://github.com/YSL-RyuDo/magicwarserver-public/blob/c38570bda4b1eb81ad7b47a872ff369b6121073d/projectMagicWar/MatchManager.cpp)
 
 ### 1回の受信を1メッセージと見なさない理由
 
@@ -129,7 +129,7 @@ TCPは順序のあるバイトストリームなので、送信と受信の境�
 
 フレーミングには長さ・容量の検査とオブジェクト寿命の管理が必要です。ヘッダーや本文の分割、1回の受信に複数メッセージが含まれる場合、I/O待機中の切断を扱います。
 
-[magicwarserver/PacketParser.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/PacketParser.cpp), [magicwarserver/IOCP_Recv.cpp](https://github.com/YSL-RyuDo/magicwarserver/blob/8089751ae5136876d6fe133fdb980ef24c97684c/projectMagicWar/IOCP_Recv.cpp)
+[magicwarserver/PacketParser.cpp](https://github.com/YSL-RyuDo/magicwarserver-public/blob/c38570bda4b1eb81ad7b47a872ff369b6121073d/projectMagicWar/PacketParser.cpp), [magicwarserver/IOCP_Recv.cpp](https://github.com/YSL-RyuDo/magicwarserver-public/blob/c38570bda4b1eb81ad7b47a872ff369b6121073d/projectMagicWar/IOCP_Recv.cpp)
 
 ### 魔法の表示情報と戦闘数値を分ける理由
 
@@ -179,6 +179,6 @@ Windows C++ワークロードを備えたVisual Studioで[projectMagicWar.sln](p
 
 ## 関連リポジトリ
 
-[magicwarserver](https://github.com/YSL-RyuDo/magicwarserver), 非公開・アクセス権が必要
+[magicwarserver](https://github.com/YSL-RyuDo/magicwarserver-public), 公開ソース
 
-[magicwar](https://github.com/YSL-RyuDo/magicwar), 非公開・アクセス権が必要
+[magicwar](https://github.com/YSL-RyuDo/magicwar), 公開ソース

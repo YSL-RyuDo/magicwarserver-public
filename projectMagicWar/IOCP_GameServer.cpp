@@ -1,3 +1,5 @@
+#include <cstdlib>
+#include <string>
 #include "IOCP_GameServer.h"
 #include "PacketManager.h"
 #include "DBManager.h"
@@ -66,7 +68,18 @@ bool IOCP_GameServer::Start()
     for (int i = 0; i < acceptCount; i++)
         PostAccept();
 
-    DBManager::Init("127.0.0.1", "SET_DB_USER", "SET_DB_PASSWORD", "SET_DB_NAME", 3307);
+    auto dbEnv = [](const char* key, const char* fallback) {
+        char* value = nullptr;
+        size_t size = 0;
+        if (_dupenv_s(&value, &size, key) != 0 || value == nullptr)
+            return std::string(fallback);
+        std::string result(value);
+        std::free(value);
+        return result;
+    };
+    DBManager::Init(dbEnv("ARCANA_DB_HOST", "127.0.0.1"),
+        dbEnv("ARCANA_DB_USER", ""), dbEnv("ARCANA_DB_PASSWORD", ""),
+        dbEnv("ARCANA_DB_NAME", ""), 3307);
     dbWorker.Start();
     g_dbWorker = &dbWorker;
 
