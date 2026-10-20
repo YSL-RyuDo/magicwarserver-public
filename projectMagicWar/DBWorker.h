@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <thread>
 #include <queue>
 #include <mutex>
@@ -16,10 +16,10 @@ public:
     DBWorker();
     ~DBWorker();
 
-    void Start();
+    bool Start();
     void Stop();
 
-    void Enqueue(DBTask task);
+    bool Enqueue(DBTask task);
 
 private:
     void Run();

@@ -1,18 +1,24 @@
-#include <iostream>
+﻿#include <iostream>
+#include <cstdlib>
 #include "IOCP_GameServer.h"
 using namespace std;
 
 int main()
 {
-    IOCP_GameServer server(9000, 0, 8);
+    char* portText = nullptr;
+    size_t portSize = 0;
+    _dupenv_s(&portText, &portSize, "ARCANA_PORT");
+    const int port = portText ? std::atoi(portText) : 9000;
+    std::free(portText);
+    if (port < 1 || port > 65535) return 1;
+    IOCP_GameServer server(static_cast<unsigned short>(port), 0, 8);
 
-    server.Start();
+    if (!server.Start()) return 1;
 
     while (true)
     {
         char c;
-        cin >> c;
-        if (c == 'q') break;
+        if (!(cin >> c) || c == 'q') break;
     }
     
     server.Stop();

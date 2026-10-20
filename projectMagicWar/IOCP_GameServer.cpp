@@ -1,4 +1,4 @@
-#include <cstdlib>
+ï»¿#include <cstdlib>
 #include <string>
 #include "IOCP_GameServer.h"
 #include "PacketManager.h"
@@ -6,9 +6,9 @@
 #include "DBWorkerInstance.h"
 
 #include <iostream>
-#include <ws2tcpip.h> // InetNtopA »ç¿ë À§ÇØ ÇÊ¿ä
+#include <ws2tcpip.h> // InetNtopA ì‚¬ìš© ìœ„í•´ í•„ìš”
 
-// IOCP ±â¹İ TCP °ÔÀÓ ¼­¹ö Å¬·¡½º ±¸Çö
+// IOCP ê¸°ë°˜ TCP ê²Œì„ ì„œë²„ í´ë˜ìŠ¤ êµ¬í˜„
 IOCP_GameServer::IOCP_GameServer(unsigned short port, int workerCount, int acceptCount)
     : port(port),
     workerCount(workerCount ? workerCount : std::thread::hardware_concurrency()),
@@ -23,13 +23,13 @@ IOCP_GameServer::IOCP_GameServer(unsigned short port, int workerCount, int accep
     sendProcessor = nullptr;
 }
 
-// ¼­¹ö Á¾·á ½Ã ¸®¼Ò½º Á¤¸®
+// ì„œë²„ ì¢…ë£Œ ì‹œ ë¦¬ì†ŒìŠ¤ ì •ë¦¬
 IOCP_GameServer::~IOCP_GameServer()
 {
     Stop();
 }
 
-// ¼­¹ö ¼ÒÄÏ ÃÊ±âÈ­, IOCP ¿¬°á, ¿öÄ¿ ½º·¹µå ¹× DB ÃÊ±âÈ­
+// ì„œë²„ ì†Œì¼“ ì´ˆê¸°í™”, IOCP ì—°ê²°, ì›Œì»¤ ìŠ¤ë ˆë“œ ë° DB ì´ˆê¸°í™”
 bool IOCP_GameServer::Start()
 {
     WSADATA wsa;
@@ -41,6 +41,14 @@ bool IOCP_GameServer::Start()
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
+    char* bindHost = nullptr;
+    size_t bindSize = 0;
+    if (_dupenv_s(&bindHost, &bindSize, "ARCANA_BIND_HOST") == 0 && bindHost)
+    {
+        const int valid = InetPtonA(AF_INET, bindHost, &addr.sin_addr);
+        std::free(bindHost);
+        if (valid != 1) { closesocket(listenSock); WSACleanup(); return false; }
+    }
     addr.sin_port = htons(port);
 
     ret = ::bind(listenSock, (sockaddr*)&addr, sizeof(addr));
@@ -56,7 +64,33 @@ bool IOCP_GameServer::Start()
     recvProcessor = new IOCP_Recv(&bufPool, &ovPool);
     sendProcessor = new IOCP_Send(&ovPool, &bufPool);
 
+
+    auto dbEnv = [](const char* key, const char* fallback) {
+        char* value = nullptr;
+        size_t size = 0;
+        if (_dupenv_s(&value, &size, key) != 0 || value == nullptr)
+            return std::string(fallback);
+        std::string result(value);
+        std::free(value);
+        return result;
+    };
+    if (!DBManager::Init(dbEnv("ARCANA_DB_HOST", "127.0.0.1"),
+        dbEnv("ARCANA_DB_USER", ""), dbEnv("ARCANA_DB_PASSWORD", ""),
+        dbEnv("ARCANA_DB_NAME", ""), static_cast<unsigned int>(std::stoul(dbEnv("ARCANA_DB_PORT", "3307")))) ||
+        !UserManager::LoadRankTable() || !UserManager::LoadCardTable() ||
+        !dbWorker.Start())
+    {
+        closesocket(listenSock);
+        CloseHandle(iocpHandle);
+        delete recvProcessor;
+        delete sendProcessor;
+        recvProcessor = nullptr;
+        sendProcessor = nullptr;
+        WSACleanup();
+        return false;
+    }
     PacketManager::Init(&userMap, &matchMgr, sendProcessor);
+    g_dbWorker = &dbWorker;
 
     running = true;
 
@@ -68,23 +102,7 @@ bool IOCP_GameServer::Start()
     for (int i = 0; i < acceptCount; i++)
         PostAccept();
 
-    auto dbEnv = [](const char* key, const char* fallback) {
-        char* value = nullptr;
-        size_t size = 0;
-        if (_dupenv_s(&value, &size, key) != 0 || value == nullptr)
-            return std::string(fallback);
-        std::string result(value);
-        std::free(value);
-        return result;
-    };
-    DBManager::Init(dbEnv("ARCANA_DB_HOST", "127.0.0.1"),
-        dbEnv("ARCANA_DB_USER", ""), dbEnv("ARCANA_DB_PASSWORD", ""),
-        dbEnv("ARCANA_DB_NAME", ""), 3307);
-    dbWorker.Start();
-    g_dbWorker = &dbWorker;
 
-    UserManager::LoadRankTable();
-    UserManager::LoadCardTable();
     std::cout << "[SERVER] IOCP Game Server started. port=" << port
         << " workers=" << workerCount
         << " accepts=" << acceptCount
@@ -92,7 +110,7 @@ bool IOCP_GameServer::Start()
     return true;
 }
 
-// ¼­¹ö Á¾·á, ½º·¹µå Á¾·á ¹× ¸®¼Ò½º ÇØÁ¦
+// ì„œë²„ ì¢…ë£Œ, ìŠ¤ë ˆë“œ ì¢…ë£Œ ë° ë¦¬ì†ŒìŠ¤ í•´ì œ
 void IOCP_GameServer::Stop()
 {
     if (!running) return;
@@ -106,6 +124,8 @@ void IOCP_GameServer::Stop()
     for (auto& t : workerThreads)
         if (t.joinable()) t.join();
 
+    PacketManager::StopDelayedResults();
+    for (auto& kv : sessions) PacketManager::HandleSessionDisconnect(kv.second);
     if (g_dbWorker)
     {
         g_dbWorker->Stop();
@@ -118,13 +138,16 @@ void IOCP_GameServer::Stop()
     delete sendProcessor;
 
     for (auto& kv : sessions)
+    {
+        closesocket(kv.second->sock);
         sessionPool.Release(kv.second);
+    }
 
     sessions.clear();
     WSACleanup();
 }
 
-// AcceptEx ¹× GetAcceptExSockAddrs ÇÔ¼ö Æ÷ÀÎÅÍ ·Îµå
+// AcceptEx ë° GetAcceptExSockAddrs í•¨ìˆ˜ í¬ì¸í„° ë¡œë“œ
 void IOCP_GameServer::LoadExtensionFunctions()
 {
     DWORD bytes = 0;
@@ -153,7 +176,7 @@ void IOCP_GameServer::LoadExtensionFunctions()
 
 }
 
-// »õ Å¬¶óÀÌ¾ğÆ® ¿¬°á ¿äÃ»À» ¼ö½ÅÇÏ±â À§ÇØ ºñµ¿±â Accept ÀÛ¾÷ °Ô½Ã
+// ìƒˆ í´ë¼ì´ì–¸íŠ¸ ì—°ê²° ìš”ì²­ì„ ìˆ˜ì‹ í•˜ê¸° ìœ„í•´ ë¹„ë™ê¸° Accept ì‘ì—… ê²Œì‹œ
 void IOCP_GameServer::PostAccept()
 {
     OverlappedEx* ov = ovPool.Acquire();
@@ -176,7 +199,7 @@ void IOCP_GameServer::PostAccept()
 
         if (err != WSA_IO_PENDING)
         {
-            std::cout << "[ACCEPT][Ä¡¸íÀû] AcceptEx Áï½Ã ½ÇÆĞ\n";
+            std::cout << "[ACCEPT][ì¹˜ëª…ì ] AcceptEx ì¦‰ì‹œ ì‹¤íŒ¨\n";
             closesocket(ov->acceptSock);
             bufPool.Release(ov->bufferPtr);
             ovPool.Release(ov);
@@ -184,7 +207,7 @@ void IOCP_GameServer::PostAccept()
     }
 }
 
-// IOCP ¿öÄ¿ ½º·¹µå ·çÇÁ
+// IOCP ì›Œì»¤ ìŠ¤ë ˆë“œ ë£¨í”„
 void IOCP_GameServer::WorkerThread()
 {
     while (running)
@@ -215,13 +238,13 @@ void IOCP_GameServer::WorkerThread()
             break;
 
         default:
-            std::cout << "[WORKER][°æ°í] ¾Ë ¼ö ¾ø´Â ÀÛ¾÷\n";
+            std::cout << "[WORKER][ê²½ê³ ] ì•Œ ìˆ˜ ì—†ëŠ” ì‘ì—…\n";
             break;
         }
     }
 }
 
-// AcceptEx ¿Ï·á Ã³¸®
+// AcceptEx ì™„ë£Œ ì²˜ë¦¬
 void IOCP_GameServer::AcceptCompletion(OverlappedEx* ov)
 {
     setsockopt(ov->acceptSock, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT, (char*)&listenSock, sizeof(listenSock));
@@ -238,7 +261,7 @@ void IOCP_GameServer::AcceptCompletion(OverlappedEx* ov)
     char ipStr[INET_ADDRSTRLEN]{};
     InetNtopA(AF_INET, &clientAddr->sin_addr, ipStr, sizeof(ipStr));
 
-    printf("[ACCEPT] Å¬¶óÀÌ¾ğÆ® ¿¬°áµÊ: %s:%d\n", ipStr, ntohs(clientAddr->sin_port));
+    printf("[ACCEPT] í´ë¼ì´ì–¸íŠ¸ ì—°ê²°ë¨: %s:%d\n", ipStr, ntohs(clientAddr->sin_port));
 
     Session* session = sessionPool.Acquire();
     session->sock = ov->acceptSock;
@@ -258,13 +281,13 @@ void IOCP_GameServer::AcceptCompletion(OverlappedEx* ov)
     PostAccept();
 }
 
-// ¼ö½Å ¿Ï·á Ã³¸®
+// ìˆ˜ì‹  ì™„ë£Œ ì²˜ë¦¬
 void IOCP_GameServer::RecvCompletion(Session* session, OverlappedEx* ov, DWORD bytes)
 {
     recvProcessor->RecvCompletion(session, ov, bytes);
 }
 
-// ¼Û½Å ¿Ï·á Ã³¸®
+// ì†¡ì‹  ì™„ë£Œ ì²˜ë¦¬
 void IOCP_GameServer::SendCompletion(Session* session, OverlappedEx* ov)
 {
     sendProcessor->SendCompletion(session, ov);

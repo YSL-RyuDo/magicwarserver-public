@@ -1,7 +1,7 @@
 ﻿#include "UserManager.h"
 #include "DBManager.h"
 #include "PasswordHasher.h"
-#include <mysql/mysql.h>
+#include "PreparedQuery.h"
 #include <iostream>
 
 std::mutex UserManager::s_mtx;
@@ -9,315 +9,132 @@ std::unordered_set<std::string> UserManager::s_loggedIn;
 std::unordered_map<int, CardInfo> UserManager::s_cards;
 std::unordered_map<int, RankInfo> UserManager::s_ranks;
 
-// 계정
-bool UserManager::AddUser(
-    const std::string& id,
-    const std::string& hash,
-    const std::string& salt,
-    const std::string& nick)
+// Runtime queries are owned by the single DBWorker. Startup table loads finish
+// before network workers start. Do not call these methods from IOCP workers.
+namespace {
+using Rows = std::vector<std::vector<std::string>>;
+bool Query(const char* sql, const std::vector<std::string>& values, Rows* rows = nullptr)
 {
-    std::lock_guard<std::mutex> lock(DBManager::GetMutex());
-    MYSQL* db = DBManager::Get();
-
-    if (IsIDExist(id) || IsNickExist(nick))
-        return false;
-
-    mysql_query(db, "START TRANSACTION");
-
-    auto rollback = [&]() {
-        mysql_query(db, "ROLLBACK");
-        return false;
-        };
-
-    if (mysql_query(db,
-        ("INSERT INTO user_account(id,hash,salt,nickname) VALUES('"
-            + id + "','" + hash + "','" + salt + "','" + nick + "')").c_str()) != 0)
-        return rollback();
-
-    if (mysql_query(db,
-        ("INSERT INTO user_info(user_id) VALUES('" + id + "')").c_str()) != 0)
-        return rollback();
-
-    if (mysql_query(db,
-        ("INSERT INTO user_rank(user_id) VALUES('" + id + "')").c_str()) != 0)
-        return rollback();
-
-    if (mysql_query(db,
-        ("INSERT INTO user_magic(user_id,magic0,magic1,magic2,magic3)"
-            " VALUES('" + id + "',0,1,2,3)").c_str()) != 0)
-        return rollback();
-
-    if (mysql_query(db, "COMMIT") != 0)
-        return rollback();
-
-    return ValidateUser(id);
+    return PreparedQuery(DBManager::Get(), sql, values, rows);
+}
 }
 
-bool UserManager::CheckLogin(
-    const std::string& id,
-    const std::string& pw,
-    std::string& outNick)
+bool UserManager::AddUser(const std::string& id, const std::string& hash,
+    const std::string& salt, const std::string& nick)
 {
-    std::lock_guard<std::mutex> lock(DBManager::GetMutex());
     MYSQL* db = DBManager::Get();
-
-    if (mysql_query(db,
-        ("SELECT hash,salt,nickname FROM user_account WHERE id='" + id + "'").c_str()) != 0)
-        return false;
-
-    MYSQL_RES* res = mysql_store_result(db);
-    if (!res) return false;
-
-    MYSQL_ROW row = mysql_fetch_row(res);
-    if (!row)
+    if (!db || mysql_query(db, "START TRANSACTION") != 0) return false;
+    // The schema must enforce UNIQUE id/nickname; any insert error rolls back.
+    const bool ok =
+        Query("INSERT INTO user_account(id,hash,salt,nickname) VALUES(?,?,?,?)",
+            {id, hash, salt, nick}) &&
+        Query("INSERT INTO user_info(user_id) VALUES(?)", {id}) &&
+        Query("INSERT INTO user_rank(user_id) VALUES(?)", {id}) &&
+        Query("INSERT INTO user_magic(user_id,magic0,magic1,magic2,magic3) VALUES(?,0,1,2,3)", {id}) &&
+        ValidateUser(id);
+    if (!ok || mysql_query(db, "COMMIT") != 0)
     {
-        mysql_free_result(res);
+        mysql_query(db, "ROLLBACK");
         return false;
     }
+    return true;
+}
 
-    std::string hash = row[0];
-    std::string salt = row[1];
-    outNick = row[2];
-
-    mysql_free_result(res);
-    return PasswordHasher::Hash(pw, salt) == hash;
+bool UserManager::CheckLogin(const std::string& id, const std::string& pw,
+    std::string& outNick)
+{
+    Rows rows;
+    if (!Query("SELECT hash,salt,nickname FROM user_account WHERE id=?", {id}, &rows)
+        || rows.empty()) return false;
+    if (PasswordHasher::Hash(pw, rows[0][1]) != rows[0][0]) return false;
+    outNick = rows[0][2];
+    return true;
 }
 
 bool UserManager::IsIDExist(const std::string& id)
 {
-    MYSQL* db = DBManager::Get();
-    if (mysql_query(db,
-        ("SELECT 1 FROM user_account WHERE id='" + id + "' LIMIT 1").c_str()) != 0)
-        return false;
-
-    MYSQL_RES* res = mysql_store_result(db);
-    bool exist = (res && mysql_num_rows(res) > 0);
-    if (res) mysql_free_result(res);
-    return exist;
+    Rows rows;
+    return Query("SELECT 1 FROM user_account WHERE id=? LIMIT 1", {id}, &rows)
+        && !rows.empty();
 }
-
 bool UserManager::IsNickExist(const std::string& nick)
 {
-    MYSQL* db = DBManager::Get();
-    if (mysql_query(db,
-        ("SELECT 1 FROM user_account WHERE nickname='" + nick + "' LIMIT 1").c_str()) != 0)
-        return false;
-
-    MYSQL_RES* res = mysql_store_result(db);
-    bool exist = (res && mysql_num_rows(res) > 0);
-    if (res) mysql_free_result(res);
-    return exist;
+    Rows rows;
+    return Query("SELECT 1 FROM user_account WHERE nickname=? LIMIT 1", {nick}, &rows)
+        && !rows.empty();
 }
 
-// 로그인 상태
 bool UserManager::TryLoginUser(const std::string& id)
 {
     std::lock_guard<std::mutex> lock(s_mtx);
-    if (s_loggedIn.count(id)) return false;
-    s_loggedIn.insert(id);
-    return true;
+    return s_loggedIn.insert(id).second;
 }
-
 void UserManager::LogoutUser(const std::string& id)
 {
     std::lock_guard<std::mutex> lock(s_mtx);
     s_loggedIn.erase(id);
 }
 
-// 저장 및 불러오기
 bool UserManager::LoadUserInfo(const std::string& id, UserInfoData& out)
 {
-    MYSQL* db = DBManager::Get();
-    if (mysql_query(db,
-        ("SELECT level,exp,win,lose FROM user_info WHERE user_id='" + id + "'").c_str()) != 0)
-        return false;
-
-    MYSQL_RES* res = mysql_store_result(db);
-    if (!res) return false;
-
-    MYSQL_ROW row = mysql_fetch_row(res);
-    if (!row)
-    {
-        mysql_free_result(res);
-        return false;
-    }
-
-    out.level = atoi(row[0]);
-    out.exp = atoi(row[1]);
-    out.win = atoi(row[2]);
-    out.lose = atoi(row[3]);
-
-    mysql_free_result(res);
+    Rows r;
+    if (!Query("SELECT level,exp,win,lose FROM user_info WHERE user_id=?", {id}, &r)
+        || r.empty()) return false;
+    out = {std::stoi(r[0][0]), std::stoi(r[0][1]), std::stoi(r[0][2]), std::stoi(r[0][3])};
     return true;
 }
-
 bool UserManager::SaveUserInfo(const std::string& id, const UserInfoData& d)
 {
-    MYSQL* db = DBManager::Get();
-    return mysql_query(db,
-        ("UPDATE user_info SET "
-            "level=" + std::to_string(d.level) +
-            ",exp=" + std::to_string(d.exp) +
-            ",win=" + std::to_string(d.win) +
-            ",lose=" + std::to_string(d.lose) +
-            " WHERE user_id='" + id + "'").c_str()) == 0;
+    return Query("UPDATE user_info SET level=?,exp=?,win=?,lose=? WHERE user_id=?",
+        {std::to_string(d.level), std::to_string(d.exp), std::to_string(d.win),
+            std::to_string(d.lose), id});
 }
-
 bool UserManager::LoadUserRank(const std::string& id, UserRankData& out)
 {
-    MYSQL* db = DBManager::Get();
-    if (mysql_query(db,
-        ("SELECT mmr,rank,rank_score FROM user_rank WHERE user_id='" + id + "'").c_str()) != 0)
-        return false;
-
-    MYSQL_RES* res = mysql_store_result(db);
-    if (!res) return false;
-
-    MYSQL_ROW row = mysql_fetch_row(res);
-    if (!row)
-    {
-        mysql_free_result(res);
-        return false;
-    }
-
-    out.mmr = atoi(row[0]);
-    out.rank = atoi(row[1]);
-    out.rankScore = atoi(row[2]);
-
-    mysql_free_result(res);
+    Rows r;
+    if (!Query("SELECT mmr,`rank`,rank_score FROM user_rank WHERE user_id=?", {id}, &r)
+        || r.empty()) return false;
+    out = {std::stoi(r[0][0]), std::stoi(r[0][1]), std::stoi(r[0][2])};
     return true;
 }
-
 bool UserManager::SaveUserRank(const std::string& id, const UserRankData& d)
 {
-    MYSQL* db = DBManager::Get();
-    return mysql_query(db,
-        ("UPDATE user_rank SET "
-            "mmr=" + std::to_string(d.mmr) +
-            ",rank=" + std::to_string(d.rank) +
-            ",rank_score=" + std::to_string(d.rankScore) +
-            " WHERE user_id='" + id + "'").c_str()) == 0;
+    return Query("UPDATE user_rank SET mmr=?,`rank`=?,rank_score=? WHERE user_id=?",
+        {std::to_string(d.mmr), std::to_string(d.rank), std::to_string(d.rankScore), id});
 }
-
 bool UserManager::LoadUserMagic(const std::string& id, std::vector<int>& out)
 {
-    MYSQL* db = DBManager::Get();
-    if (mysql_query(db,
-        ("SELECT magic0,magic1,magic2,magic3 FROM user_magic WHERE user_id='" + id + "'").c_str()) != 0)
-        return false;
-
-    MYSQL_RES* res = mysql_store_result(db);
-    if (!res) return false;
-
-    MYSQL_ROW row = mysql_fetch_row(res);
-    if (!row)
-    {
-        mysql_free_result(res);
-        return false;
-    }
-
-    out = {
-        atoi(row[0]),
-        atoi(row[1]),
-        atoi(row[2]),
-        atoi(row[3])
-    };
-
-    mysql_free_result(res);
+    Rows r;
+    if (!Query("SELECT magic0,magic1,magic2,magic3 FROM user_magic WHERE user_id=?", {id}, &r)
+        || r.empty()) return false;
+    out.clear();
+    for (const auto& v : r[0]) out.push_back(std::stoi(v));
     return true;
 }
-
-//bool UserManager::ReplaceUserMagic(
-//    const std::string& id, int oldCard, int newCard)
-//{
-//    MYSQL* db = DBManager::Get();
-//    return mysql_query(db,
-//        ("UPDATE user_magic SET "
-//            "magic0=IF(magic0=" + std::to_string(oldCard) + "," + std::to_string(newCard) + ",magic0),"
-//            "magic1=IF(magic1=" + std::to_string(oldCard) + "," + std::to_string(newCard) + ",magic1),"
-//            "magic2=IF(magic2=" + std::to_string(oldCard) + "," + std::to_string(newCard) + ",magic2),"
-//            "magic3=IF(magic3=" + std::to_string(oldCard) + "," + std::to_string(newCard) + ",magic3)"
-//            " WHERE user_id='" + id + "'").c_str()) == 0;
-//}
-
-bool UserManager::ReplaceUserMagic(
-    const std::string& id, int oldCard, int newCard)
+bool UserManager::ReplaceUserMagic(const std::string& id, int oldCard, int newCard)
 {
-    MYSQL* db = DBManager::Get();
-
-    // 1. 현재 덱 로드
-    std::string select =
-        "SELECT magic0, magic1, magic2, magic3 "
-        "FROM user_magic WHERE user_id='" + id + "'";
-
-    if (mysql_query(db, select.c_str()) != 0)
-        return false;
-
-    MYSQL_RES* res = mysql_store_result(db);
-    if (!res)
-        return false;
-
-    MYSQL_ROW row = mysql_fetch_row(res);
-    if (!row)
-    {
-        mysql_free_result(res);
-        return false;
-    }
-
-    int deck[4];
-    for (int i = 0; i < 4; ++i)
-        deck[i] = atoi(row[i]);
-
-    mysql_free_result(res);
-
-    // 2. old / new 위치 찾기
-    int oldIdx = -1;
-    int newIdx = -1;
-
+    if (!GetCardInfo(newCard)) return false;
+    std::vector<int> deck;
+    if (!LoadUserMagic(id, deck)) return false;
+    int oldIdx = -1, newIdx = -1;
     for (int i = 0; i < 4; ++i)
     {
-        if (deck[i] == oldCard)
-            oldIdx = i;
-        if (deck[i] == newCard)
-            newIdx = i;
+        if (deck[i] == oldCard) oldIdx = i;
+        if (deck[i] == newCard) newIdx = i;
     }
-
-    if (oldIdx == -1)
-        return false;
-
-    // 같은 카드 → 그대로 성공
-    if (oldCard == newCard)
-        return true;
-
-    // 3. 스왑 or 치환
-    if (newIdx != -1)
-    {
-        std::swap(deck[oldIdx], deck[newIdx]);
-    }
-    else
-    {
-        deck[oldIdx] = newCard;
-    }
-
-    // 4. DB 반영
-    std::string update =
-        "UPDATE user_magic SET "
-        "magic0=" + std::to_string(deck[0]) + ","
-        "magic1=" + std::to_string(deck[1]) + ","
-        "magic2=" + std::to_string(deck[2]) + ","
-        "magic3=" + std::to_string(deck[3]) +
-        " WHERE user_id='" + id + "'";
-
-    return mysql_query(db, update.c_str()) == 0;
+    if (oldIdx < 0) return false;
+    if (oldCard == newCard) return true;
+    if (newIdx >= 0) std::swap(deck[oldIdx], deck[newIdx]);
+    else deck[oldIdx] = newCard;
+    return Query("UPDATE user_magic SET magic0=?,magic1=?,magic2=?,magic3=? WHERE user_id=?",
+        {std::to_string(deck[0]), std::to_string(deck[1]), std::to_string(deck[2]),
+            std::to_string(deck[3]), id});
 }
-
-
 bool UserManager::LoadUserProfile(const std::string& id, UserProfileData& out)
 {
     return LoadUserInfo(id, out.info) && LoadUserRank(id, out.rank);
 }
 
-// 카드 및 랭크 테이블
 bool UserManager::LoadCardTable()
 {
     MYSQL* db = DBManager::Get();
@@ -354,7 +171,7 @@ bool UserManager::LoadRankTable()
 {
     MYSQL* db = DBManager::Get();
     if (mysql_query(db,
-        "SELECT rank,name,min_score,max_score FROM rank_table") != 0)
+        "SELECT `rank`,name,min_score,max_score FROM rank_table") != 0)
         return false;
 
     MYSQL_RES* res = mysql_store_result(db);

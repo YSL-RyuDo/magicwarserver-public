@@ -1,67 +1,70 @@
-#include "DBWorker.h"
+癤�#include "DBWorker.h"
+#include <iostream>
+#include <mysql/mysql.h>
+#include <future>
 
-// DB 워커의 실행 상태를 초기화하는 생성자입니다.
-DBWorker::DBWorker()
-    : running(false)
-{
-}
+DBWorker::DBWorker() : running(false) {}
+DBWorker::~DBWorker() { Stop(); }
 
-// DB 워커 소멸 시 스레드를 안전하게 종료합니다.
-DBWorker::~DBWorker()
+bool DBWorker::Start()
 {
-    Stop();
-}
-
-// DB 작업 처리를 위한 워커 스레드를 시작합니다.
-void DBWorker::Start()
-{
+    std::unique_lock<std::mutex> lock(mtx);
+    if (running) return true;
+    if (worker.joinable()) return false;
     running = true;
-    worker = thread(&DBWorker::Run, this);
+    std::promise<bool> initialized;
+    auto ready = initialized.get_future();
+    worker = std::thread([this, initialized = std::move(initialized)]() mutable {
+        const bool ok = mysql_thread_init() == 0;
+        initialized.set_value(ok);
+        if (!ok) return;
+        Run();
+        mysql_thread_end();
+    });
+    if (!ready.get())
+    {
+        running = false;
+        lock.unlock();
+        worker.join();
+        return false;
+    }
+    return true;
 }
 
-// 워커 스레드를 중단하고 정상 종료를 보장합니다.
 void DBWorker::Stop()
 {
-    if (!running)
-        return;
-
-    running = false;
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        running = false;
+    }
     cv.notify_all();
-
-    if (worker.joinable())
-        worker.join();
+    if (worker.joinable()) worker.join();
 }
 
-// 실행할 DB 작업을 큐에 등록합니다.
-void DBWorker::Enqueue(DBTask task)
+bool DBWorker::Enqueue(DBTask task)
 {
     {
-        lock_guard<mutex> lock(mtx);
-        tasks.push(move(task));
+        std::lock_guard<std::mutex> lock(mtx);
+        if (!running || tasks.size() >= 4096) return false;
+        tasks.push(std::move(task));
     }
     cv.notify_one();
+    return true;
 }
 
-// 큐에 쌓인 DB 작업을 순차적으로 처리하는 워커 루프입니다.
 void DBWorker::Run()
 {
-    while (running)
+    for (;;)
     {
         DBTask task;
-
         {
-            unique_lock<mutex> lock(mtx);
-            cv.wait(lock, [&]() {
-                return !tasks.empty() || !running;
-                });
-
-            if (!running && tasks.empty())
-                return;
-
-            task = move(tasks.front());
+            std::unique_lock<std::mutex> lock(mtx);
+            cv.wait(lock, [&] { return !tasks.empty() || !running; });
+            if (tasks.empty() && !running) return;
+            task = std::move(tasks.front());
             tasks.pop();
         }
-
-        task();
+        try { task(); }
+        catch (...) { std::cerr << "[DB] task failed; worker remains available\n"; }
     }
 }

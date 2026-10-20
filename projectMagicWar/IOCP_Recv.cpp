@@ -1,9 +1,11 @@
-#include "IOCP_Recv.h"
+ï»¿#include "IOCP_Recv.h"
 #include "PacketParser.h"
+#include "PacketManager.h"
+#include <algorithm>
 #include "IOCP_Defines.h"
 #include <iostream>
 
-// ºñµ¿±â WSARecv¸¦ µî·ÏÇÏ¿© ¼¼¼ÇÀÇ ´ÙÀ½ ¼ö½ÅÀ» ´ë±â½ÃÅ°´Â ÇÔ¼ö
+// ë¹„ë™ê¸° WSARecvë¥¼ ë“±ë¡í•˜ì—¬ ì„¸ì…˜ì˜ ë‹¤ìŒ ìˆ˜ì‹ ì„ ëŒ€ê¸°ì‹œí‚¤ëŠ” í•¨ìˆ˜
 void IOCP_Recv::PostRecv(Session* session)
 {
     if (!session)
@@ -14,8 +16,10 @@ void IOCP_Recv::PostRecv(Session* session)
 
     if (session->closing)
     {
+        PacketManager::HandleSessionDisconnect(session);
+        shutdown(session->sock, SD_BOTH);
         std::cout
-            << "[RECV][POST] Áß´ÜµÊ (closing=true) "
+            << "[RECV][POST] ì¤‘ë‹¨ë¨ (closing=true) "
             << "sessionId=" << session->sessionId
             << "\n";
         return;
@@ -51,12 +55,14 @@ void IOCP_Recv::PostRecv(Session* session)
         if (err != WSA_IO_PENDING)
         {
             std::cout
-                << "[RECV][POST][ERROR] WSARecv ½ÇÆĞ "
+                << "[RECV][POST][ERROR] WSARecv ì‹¤íŒ¨ "
                 << "err=" << err
                 << " sessionId=" << session->sessionId
                 << "\n";
 
             session->closing = true;
+            PacketManager::HandleSessionDisconnect(session);
+            shutdown(session->sock, SD_BOTH);
 
             bufPool->Release(ov->bufferPtr);
             ovPool->Release(ov);
@@ -64,28 +70,30 @@ void IOCP_Recv::PostRecv(Session* session)
     }
 }
 
-// ¼ö½Å ¿Ï·áµÈ µ¥ÀÌÅÍ¸¦ ¼¼¼Ç ¹öÆÛ¿¡ ´©ÀûÇÏ°í ÆĞÅ¶ ÆÄ½Ì ÈÄ ´ÙÀ½ ¼ö½ÅÀ» Àçµî·ÏÇÏ´Â ÇÔ¼ö
+// ìˆ˜ì‹  ì™„ë£Œëœ ë°ì´í„°ë¥¼ ì„¸ì…˜ ë²„í¼ì— ëˆ„ì í•˜ê³  íŒ¨í‚· íŒŒì‹± í›„ ë‹¤ìŒ ìˆ˜ì‹ ì„ ì¬ë“±ë¡í•˜ëŠ” í•¨ìˆ˜
 void IOCP_Recv::RecvCompletion(Session* session, OverlappedEx* ov, DWORD bytes)
 {
-    if (bytes == 0)
+
+    std::lock_guard<std::recursive_mutex> lock(session->stateMtx);
+    if (bytes == 0 || bytes > IOCP_BUFFER_SIZE) session->closing = true;
+    size_t offset = 0;
+    while (!session->closing && offset < bytes)
     {
-        std::cout
-            << "[RECV] bytes=0 ¡æ ¿¬°á Á¾·á Ã³¸® "
-            << "session=" << session->sessionId
-            << "\n";
-        session->closing = true;
-        bufPool->Release(ov->bufferPtr);
-        ovPool->Release(ov);
-        return;
+        if (session->recvUsed < 0 || session->recvUsed >= IOCP_BUFFER_SIZE)
+        { session->closing = true; break; }
+        const auto count = (std::min)(size_t(IOCP_BUFFER_SIZE - session->recvUsed),
+            size_t(bytes) - offset);
+        memcpy(session->recvBuffer + session->recvUsed, ov->bufferPtr + offset, count);
+        session->recvUsed += static_cast<int>(count);
+        offset += count;
+        PacketParser::ProcessBuffer(session);
     }
-
-    memcpy(session->recvBuffer + session->recvUsed, ov->bufferPtr, bytes);
-    session->recvUsed += bytes;
-
-    PacketParser::ProcessBuffer(session);
-
     bufPool->Release(ov->bufferPtr);
     ovPool->Release(ov);
-
-    PostRecv(session);
+    if (session->closing)
+    {
+        PacketManager::HandleSessionDisconnect(session);
+        shutdown(session->sock, SD_BOTH);
+    }
+    else PostRecv(session);
 }
